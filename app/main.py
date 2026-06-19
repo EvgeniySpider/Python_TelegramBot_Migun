@@ -44,9 +44,9 @@ def configure_logging():
 def create_app(app_settings: AppSettings) -> Application:
     application = (
         ApplicationBuilder()
-        .application_class(Application, kwargs={"app_settings": app_settings})
-        .post_init(Application.initialize_dependencies)  # type: ignore[arg-type]
-        .post_shutdown(Application.shutdown_dependencies)  # type: ignore[arg-type]
+        .application_class(Application, kwargs={"app_settings": app_settings}) # type: ignore[arg-type]
+        .post_init(Application.initialize_dependencies) # type: ignore[arg-type]
+        .post_shutdown(Application.shutdown_dependencies)
         .token(app_settings.telegram_api_key.get_secret_value())
         .build()
     )
@@ -54,7 +54,13 @@ def create_app(app_settings: AppSettings) -> Application:
 
 
 if __name__ == '__main__':
+    import asyncio
+
     configure_logging()
+
+    # Явно создаем и регистрируем event loop, так как Python 3.14+ больше не делает это автоматически
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     settings = AppSettings()
     app = create_app(settings)
     app.run()

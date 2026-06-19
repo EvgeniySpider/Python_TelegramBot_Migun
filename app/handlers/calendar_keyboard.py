@@ -2,8 +2,11 @@ import calendar
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def generate_calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
+def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None) -> InlineKeyboardMarkup:
     # 1. Получаем текстовое название месяца (пока на английском, потом русифицируем)
+    if busy_days is None:
+        busy_days = set()
+
     month_name = calendar.month_name[month]
 
     keyboard = []
@@ -29,16 +32,20 @@ def generate_calendar_keyboard(year: int, month: int) -> InlineKeyboardMarkup:
         row = []
         for day in week:
             if day == 0:
-                # Если день равен 0 — это пустая клетка (соседний месяц), делаем её некликабельной
+                # Наша распорка (пустая кнопка)
                 row.append(InlineKeyboardButton(
                     text=" ", callback_data="calendar_ignore"))
             else:
-                # Обычный день. В коллбэк зашиваем дату, чтобы хэндлер понял, какой день выбрал юзер
-                row.append(InlineKeyboardButton(
-                    text=str(day),
-                    callback_data=f"calendar_day:{year}:{month}:{day}"
-                ))
-        keyboard.append(row)
+                # Шаг проверки: если день есть в множестве занятых — добавляем галочку
+                if day in busy_days:
+                    button_text = f"✅ {day}"
+                else:
+                    button_text = str(day)
+                    row.append(InlineKeyboardButton(
+                        text=button_text,
+                        callback_data=f"calendar_day:{year}:{month}:{day}"
+                    ))
+            keyboard.append(row)
 
     # РЯД 9: Кнопки навигации (Стрелочки)
     # Вычисляем прошлый и следующий месяц для коллбэков стрелочек

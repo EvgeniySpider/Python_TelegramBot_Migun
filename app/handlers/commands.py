@@ -1,8 +1,9 @@
 from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from app.core.calendar.services import CalendarService
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
-
+from app.infra.postgres.db import Database
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat and update.effective_user:
@@ -11,15 +12,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_chat:
-        now = datetime.now()
-        # Строим JSON-инструкцию кнопок
-        calendar_markup: InlineKeyboardMarkup = generate_calendar_keyboard(now.year, now.month)
+    # Защита от пустых апдейтов
+    if not update.effective_chat or not update.effective_user:
+        return
 
-        # Отправляем сообщение и прикрепляем к нему клавиатуру через reply_markup
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="📅 **Инлайн-Календарь**\nВыберите интересующую вас дату:",
-            reply_markup=calendar_markup,
-            parse_mode="Markdown"
+    user_id = update.effective_user.id
+    now = datetime.now()
+
+    # 1. Используем твой контекстный менеджер из db.py для выдачи коннекта
+    async with Database.connection() as conn:
+        # 2. Запрашиваем из бизнес-логики сет занятых дней
+        busy_days = await CalendarService.get_user_busy_days(
+            conn=conn, 
+            user_id=user_id, 
+            year=now.year, 
+            month=now.month
         )
+
+    # 3. Генерируем клавиатуру с учётом полученных галочек
+    calendar_markup: InlineKeyboardMarkup = generate_calendar_keyboard(
+        year=now.year, 
+        month=now.month, 
+        busy_days=busy_days
+    )
+
+    # 4. Отправляем сообщение пользователю
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="📅 **Инлайн-Календарь**\nВыберите интересующую вас дату:",
+        reply_markup=calendar_markup,
+        parse_mode="Markdown"
+    )

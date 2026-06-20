@@ -32,20 +32,25 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
         row = []
         for day in week:
             if day == 0:
-                # Наша распорка (пустая кнопка)
+                # пустая кнопка
                 row.append(InlineKeyboardButton(
-                    text=" ", callback_data="calendar_ignore"))
+                    text=" ", callback_data="calendar_ignore"
+                ))
             else:
-                # Шаг проверки: если день есть в множестве занятых — добавляем галочку
+                # 1. Определяем текст для кнопки
                 if day in busy_days:
                     button_text = f"✅ {day}"
                 else:
                     button_text = str(day)
-                    row.append(InlineKeyboardButton(
-                        text=button_text,
-                        callback_data=f"calendar_day:{year}:{month}:{day}"
-                    ))
-            keyboard.append(row)
+                
+                # 2. ДОБАВЛЯЕМ КНОПКУ В РЯД (вынесли из внутреннего else)
+                row.append(InlineKeyboardButton(
+                    text=button_text,
+                    callback_data=f"calendar_day:{year}:{month}:{day}"
+                ))
+        
+        # 3. ДОБАВЛЯЕМ РЯД В КЛАВИАТУРУ (сдвинули влево, теперь он срабатывает 1 раз на неделю!)
+        keyboard.append(row)
 
     # РЯД 9: Кнопки навигации (Стрелочки)
     # Вычисляем прошлый и следующий месяц для коллбэков стрелочек

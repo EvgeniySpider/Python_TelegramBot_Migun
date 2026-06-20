@@ -19,9 +19,8 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user_id = update.effective_user.id
     now = datetime.now()
 
-    # 1. Используем твой контекстный менеджер из db.py для выдачи коннекта
-    async with Database.connection() as conn:
-        # 2. Запрашиваем из бизнес-логики сет занятых дней
+    async with context.application.database.connection() as conn:        
+        # Запрашиваем из бизнес-логики сет занятых дней
         busy_days = await CalendarService.get_user_busy_days(
             conn=conn, 
             user_id=user_id, 

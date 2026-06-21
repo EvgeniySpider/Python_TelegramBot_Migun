@@ -3,6 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None) -> InlineKeyboardMarkup:
+    """Генерирует календарь с inline-кнопками"""
     # 1. Получаем текстовое название месяца (пока на английском, потом русифицируем)
     if busy_days is None:
         busy_days = set()
@@ -42,13 +43,13 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
                     button_text = f"✅ {day}"
                 else:
                     button_text = str(day)
-                
+
                 # 2. ДОБАВЛЯЕМ КНОПКУ В РЯД (вынесли из внутреннего else)
                 row.append(InlineKeyboardButton(
                     text=button_text,
                     callback_data=f"calendar_day:{year}:{month}:{day}"
                 ))
-        
+
         # 3. ДОБАВЛЯЕМ РЯД В КЛАВИАТУРУ (сдвинули влево, теперь он срабатывает 1 раз на неделю!)
         keyboard.append(row)
 
@@ -67,4 +68,18 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
             text="След »", callback_data=f"calendar_nav:{next_year}:{next_month}")
     ])
 
+    return InlineKeyboardMarkup(keyboard)
+
+
+def generate_time_options_keyboard() -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру выбора формата времени для мероприятия."""
+    keyboard = [
+        [
+            InlineKeyboardButton(text="☀️ Весь день", callback_data="event_time:all_day")
+        ],
+        [
+            InlineKeyboardButton(text="⏳ Интервал", callback_data="event_time:interval"),
+            InlineKeyboardButton(text="🎯 Точное время", callback_data="event_time:exact")
+        ]
+    ]
     return InlineKeyboardMarkup(keyboard)

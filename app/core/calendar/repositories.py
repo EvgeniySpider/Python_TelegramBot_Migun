@@ -1,5 +1,6 @@
 import asyncpg
 from typing import List
+import datetime
 
 
 class CalendarRepository:
@@ -7,9 +8,9 @@ class CalendarRepository:
 
     @staticmethod
     async def get_busy_days(
-        conn: asyncpg.Connection, 
-        user_id: int, 
-        year: int, 
+        conn: asyncpg.Connection,
+        user_id: int,
+        year: int,
         month: int
     ) -> List[int]:
         """
@@ -23,9 +24,28 @@ class CalendarRepository:
               AND EXTRACT(YEAR FROM event_date) = $2
               AND EXTRACT(MONTH FROM event_date) = $3;
         """
-        
+
         # Выполняем асинхронный запрос. fetch returns Record объекты.
         rows = await conn.fetch(query, user_id, year, month)
-        
+
         # Достаем из каждой строки поле 'day' и упаковываем в обычный список чисел
         return [row["day"] for row in rows]
+
+    @staticmethod
+    async def get_events_by_date(
+        conn: asyncpg.Connection,
+        user_id: int,
+        event_date: datetime.date
+    ) -> List[asyncpg.Record]:
+        """
+        Вытаскивает все события пользователя на конкретную дату.
+        Возвращает список Record-объектов со всеми полями.
+        """
+        query = """
+            SELECT title, start_time, end_time, event_type
+            FROM events
+            WHERE user_id = $1 AND event_date = $2
+            ORDER BY start_time NULLS FIRST;
+        """
+        # Возвращаем «сырые» записи из базы
+        return await conn.fetch(query, user_id, event_date)

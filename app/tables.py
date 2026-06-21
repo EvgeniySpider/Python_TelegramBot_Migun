@@ -12,20 +12,24 @@ CREATE TABLE IF NOT EXISTS users (
 );
 """
 
-# 2. Запрос для создания таблицы событий календаря (Тип 1, 2, 3)
+# 2. Запрос для создания таблицы событий календаря
 CREATE_EVENTS_TABLE_QUERY = """
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    event_type VARCHAR(50) NOT NULL, -- 'purchase', 'meeting', 'custom'
-    title TEXT NOT NULL,
+    
+    -- 3 временных формата с жестким CHECK
+    event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('all_day', 'interval', 'exact')), 
+    
+    title VARCHAR(255) NOT NULL,
+    
+    -- ТУТ БУДЕТ ХРАНИТЬСЯ ДОП. ИНФОРМАЦИЯ ОТ ПОЛЬЗОВАТЕЛЯ ДЛЯ СОБЫТИЯ
+    description TEXT NULL, 
+    
     event_date DATE NOT NULL,
     start_time TIME NULL,
     end_time TIME NULL,
-    details TEXT NULL,
-    
-    -- Жесткая связь: нельзя создать событие для несуществующего пользователя
-    CONSTRAINT fk_event_user FOREIGN KEY (user_id) REFERENCES users (telegram_id) ON DELETE CASCADE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
 

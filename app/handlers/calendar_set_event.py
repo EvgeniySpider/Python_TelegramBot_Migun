@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 import re
 from telegram.ext import ConversationHandler
-from app.handlers.states import CHOOSING_TIME, WAITING_FOR_TITLE
+from app.handlers.states import WAITING_FOR_TITLE
 # event_time:all_day, event_time:interval, event_time:exact
 
 
@@ -41,7 +41,7 @@ async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             VALUES ($1, $2, $3, $4, $5, $6)
             """,
             user_id,
-            'meeting',        # Дефолтный тип из ТЗ
+            'all_day',        # Дефолтный тип из ТЗ
             event_title,       # Название, которое юзер только что ввел
             selected_date,     # Дата, которую мы помним со вчерашнего клика
             None,              # start_time для "Весь день" равен NULL

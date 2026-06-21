@@ -3,6 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_keyboard import generate_time_options_keyboard
+from app.handlers.states import CHOOSING_TIME
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,6 +41,8 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
                 f"Укажите формат времени проведения:",
             reply_markup=time_markup  # ВОТ ОНИ! Кнопки прилепились снизу текста
         )
+
+        return CHOOSING_TIME
     else:
         # ДЕНЬ ЗАНЯТ! Выводим список текущих дел
         events_text = "\n".join([f"- {e['title']}" for e in events])

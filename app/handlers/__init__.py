@@ -7,6 +7,7 @@ from telegram.ext import (
     filters
 )
 from app.handlers.commands import start, calendar_command
+from app.handlers.calendar_act_with_options import handle_options_click
 from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_set_event import (
     handle_set_event,
@@ -18,7 +19,8 @@ from app.handlers.states import (
     CHOOSING_TIME,
     WAITING_FOR_TITLE,
     WAITING_FOR_DESC_CHOICE,
-    WAITING_FOR_DESCRIPTION
+    WAITING_FOR_DESCRIPTION,
+    CHOOSING_ACTION
 )
 
 calendar_conversation = ConversationHandler(
@@ -27,6 +29,9 @@ calendar_conversation = ConversationHandler(
     ],
     
     states={
+        CHOOSING_ACTION : [
+            CallbackQueryHandler(handle_options_click, pattern=r"^action_.+$")
+        ],
         CHOOSING_TIME: [
             CallbackQueryHandler(handle_set_event, pattern=r"^event_time:.+$")
         ],

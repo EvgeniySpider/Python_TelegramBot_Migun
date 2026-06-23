@@ -1,10 +1,9 @@
 import datetime
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_keyboard import generate_time_options_keyboard
 from app.handlers.states import CHOOSING_TIME
-from app.handlers.commands import calendar_command
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -18,57 +17,55 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     month = int(parts[2])
     day = int(parts[3])
 
-    # Формируем чистый объект даты Python
     selected_date = datetime.date(year, month, day)
-    current_date = datetime.date.today()
-
-    if selected_date < current_date:
-        # 1. Показываем быструю плашку сверху
-        await query.answer(
-            text=f"❌ Ошибка: нельзя выбрать прошедшую дату!",
-            show_alert=False
-        )
-        # 2. Железно удаляем старое сообщение с неактуальным календарем
-        await query.message.delete()
-
-        # 3. Напрямую вызываем команду, которая пришлет НОВЫЙ, чистый календарь
-        await calendar_command(update, context)
-
-        # 4. Вот теперь со спокойной душой сбрасываем автомат
-        return ConversationHandler.END
-
-    await query.answer()
-
     user_id = update.effective_user.id
+    
+    # Сохраняем выбранную дату в контекст пользователя
     context.user_data['selected_date'] = selected_date
 
-    # Открываем СВОЁ собственное соединение из пула!
+    # Гасим часики анимации на инлайн-кнопке
+    await query.answer()
+
+    # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
-        # Проверяем, есть ли события на этот день
         events = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
 
-    if not events:
-        # ДЕНЬ СВОБОДЕН!
-        # 1. Генерируем наши новые инлайн-кнопки времени
+    # 2. Разветвление логики: День ЗАНЯТ vs День СВОБОДЕН
+    if events:
+        # ---- СЦЕНАРИЙ А: НА ЭТОТ ДЕНЬ ЕСТЬ СОБЫТИЯ (Абсолютная унификация) ----
+        events_text = "\n".join([f"• {e['title']}" for e in events])
+        
+        # Одинаковый, понятный набор кнопок для любой даты в календаре
+        options_keyboard = [
+            [
+                InlineKeyboardButton("➕ Добавить", callback_data="action_create"),
+                InlineKeyboardButton("✏️ Изменить", callback_data="action_edit"),
+                InlineKeyboardButton("❌ Удалить", callback_data="action_delete")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(options_keyboard)
+
+        await query.edit_message_text(
+            text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
+                 f"Запланированные дела:\n{events_text}\n\n"
+                 f"Выберите действие с расписанием:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        
+        # В будущем здесь будет возврат стейта меню действий, пока заглушка
+        return ConversationHandler.END
+
+    else:
+        # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ ----
+        # Сразу запускаем сценарий создания (выбор формата времени)
         time_markup = generate_time_options_keyboard()
 
-        # 2. Перерисовываем сообщение, прикрепляя кнопки к тексту
         await query.edit_message_text(
             text=f"Выбрана дата: {day:02d}.{month:02d}.{year}\n"
-            f"На этот день ничего не запланировано.\n\n"
-            f"Укажите формат времени проведения:",
-            reply_markup=time_markup  # ВОТ ОНИ! Кнопки прилепились снизу текста
+                 f"На этот день ничего не запланировано.\n\n"
+                 f"Укажите формат времени проведения события:",
+            reply_markup=time_markup
         )
 
         return CHOOSING_TIME
-    else:
-        # ДЕНЬ ЗАНЯТ! Выводим список текущих дел
-        events_text = "\n".join([f"- {e['title']}" for e in events])
-
-        # Сюда мы тоже можем прикрутить кнопку, например "[ ➕ Добавить событие ]"
-        # Но для стерильного теста пока просто выводим текст
-        await query.edit_message_text(
-            text=f"Выбрана дата: {day:02d}.{month:02d}.{year}\n"
-            f"У вас уже запланировано:\n{events_text}\n\n"
-            f"Желаете добавить ещё одно мероприятие?"
-        )

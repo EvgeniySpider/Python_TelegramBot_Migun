@@ -1,6 +1,6 @@
 import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_keyboard import generate_time_options_keyboard
 from app.handlers.states import CHOOSING_TIME, CHOOSING_ACTION
@@ -29,17 +29,17 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
         events = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
-        await handle_event_search_and_set_selection(events, query, day, month, year)
+        return await handle_event_search_and_set_selection(events, query, day, month, year)
 
 
 async def handle_event_search_and_set_selection(events, *args):
     if events:
-        await handle_options_with_exists_notes_in_day(events, args)
+        return await handle_options_with_exist_notes_in_day(events, args)
     else:
-        await handle_time_selection_option(args)
+        return await handle_time_selection_option(args)
 
 
-async def handle_options_with_exists_notes_in_day(events, args):
+async def handle_options_with_exist_notes_in_day(events, args):
     query, day, month, year = args
     # ---- СЦЕНАРИЙ А: НА ЭТОТ ДЕНЬ ЕСТЬ СОБЫТИЯ (Абсолютная унификация) ----
     events_text = "\n".join([f"• {e['title']}" for e in events])

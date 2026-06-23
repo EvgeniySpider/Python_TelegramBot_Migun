@@ -23,18 +23,18 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     current_date = datetime.date.today()
 
     if selected_date < current_date:
+        # 1. Показываем быструю плашку сверху
         await query.answer(
             text=f"❌ Ошибка: нельзя выбрать прошедшую дату!",
-            show_alert=True  # True сделает полноценное окно с кнопкой "Ок"
+            show_alert=False
         )
-        # 2. Удаляем старое сообщение с неправильным календарем, чтобы очистить чат
+        # 2. Железно удаляем старое сообщение с неактуальным календарем
         await query.message.delete()
 
-        # 3. Напрямую вызываем команду генерации нового календаря!
-        # Передаем туда те же update и context, которые у нас есть на руках
+        # 3. Напрямую вызываем команду, которая пришлет НОВЫЙ, чистый календарь
         await calendar_command(update, context)
 
-        # 4. Выходим из автомата. Новый клик по новому календарю начнет всё сначала
+        # 4. Вот теперь со спокойной душой сбрасываем автомат
         return ConversationHandler.END
 
     await query.answer()

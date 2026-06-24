@@ -1,27 +1,44 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.states import WAITING_FOR_TITLE, WAITING_FOR_DESC_CHOICE, WAITING_FOR_DESCRIPTION
+from app.core.calendar.services import CalendarService
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    await query.answer()
+    
 
     parts = query.data.split(":")
     data = context.user_data['selected_date']
 
-    if parts[1] == "all_day":
-        # Сразу запоминаем тип события в контекст
-        context.user_data['event_type'] = 'all_day'
-        context.user_data['start_time'] = None
-        context.user_data['end_time'] = None
-
-        await query.edit_message_text(
-            text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
-                 f"Тип события: [ ☀️ Весь день ]\n\n"
-                 f"Укажите название мероприятия:\n"
-                 f"Например: [Поездка на дачу]"
+    async with context.application.database.connection() as conn:
+        busy_days = await CalendarService.get_user_busy_days(
+            conn,
+            update.effective_user.id,
+            data.year,
+            data.month
         )
-        return WAITING_FOR_TITLE
+
+    if parts[1] == "all_day":
+        if data.day in busy_days:
+            await update.callback_query.answer(
+                text=f'❌ Ошибка: в эту дату у вас меропритие которое длится весь день.\n'
+                     f'Выберите другую дату или время\n',
+                show_alert=False
+            )
+            return ConversationHandler.END
+        else:
+            # Сразу запоминаем тип события в контекст
+            context.user_data['event_type'] = 'all_day'
+            context.user_data['start_time'] = None
+            context.user_data['end_time'] = None
+
+            await query.edit_message_text(
+                text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+                    f"Тип события: [ ☀️ Весь день ]\n\n"
+                    f"Укажите название мероприятия:\n"
+                    f"Например: [Поездка на дачу]"
+            )
+            return WAITING_FOR_TITLE
 
 
 async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

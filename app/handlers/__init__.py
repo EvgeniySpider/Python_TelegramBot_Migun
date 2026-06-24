@@ -7,7 +7,7 @@ from telegram.ext import (
     filters
 )
 from app.handlers.commands import start, calendar_command
-from app.handlers.calendar_act_with_options import handle_options_click
+from app.handlers.calendar_act_with_options import handle_options_click, handle_back_to_calendar_click
 from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_set_event import (
     handle_set_event,
@@ -30,10 +30,14 @@ calendar_conversation = ConversationHandler(
     
     states={
         CHOOSING_ACTION : [
-            CallbackQueryHandler(handle_options_click, pattern=r"^action_.+$")
+            CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete)$")
         ],
         CHOOSING_TIME: [
-            CallbackQueryHandler(handle_set_event, pattern=r"^event_time:.+$")
+            # Ловим ТОЛЬКО кнопки времени (Весь день, Интервал, Точное время)
+            CallbackQueryHandler(handle_set_event, pattern=r"^event_time:.+$"),
+
+            # Точечный перехватчик кнопки "Назад"! Он сработает ТОЛЬКО на неё.
+            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
         ],
         
         WAITING_FOR_TITLE: [

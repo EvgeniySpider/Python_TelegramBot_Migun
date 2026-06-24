@@ -75,11 +75,13 @@ def generate_time_options_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора формата времени для мероприятия."""
     keyboard = [
         [
-            InlineKeyboardButton(text="☀️ Весь день", callback_data="event_time:all_day")
+            InlineKeyboardButton(text="☀️ Весь день", callback_data="event_time:all_day"),
+            InlineKeyboardButton(text="⏱️ Точное время", callback_data="event_time:exact"),
+            InlineKeyboardButton(text="⏳ Интервал", callback_data="event_time:range")
         ],
+        # РЯД 2: Кнопка возврата к сетке календаря
         [
-            InlineKeyboardButton(text="⏳ Интервал", callback_data="event_time:interval"),
-            InlineKeyboardButton(text="🎯 Точное время", callback_data="event_time:exact")
+            InlineKeyboardButton(text="🔙 Изменить дату", callback_data="action_back_to_calendar")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)

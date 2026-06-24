@@ -12,24 +12,27 @@ class CalendarRepository:
         user_id: int,
         year: int,
         month: int
-    ) -> List[int]:
+    ) -> List[asyncpg.Record]:
         """
-        Вытаскивает из БД список дней месяца, на которые у пользователя запланированы события.
-        Возвращает список чистых чисел (дней), например: [6, 18, 25].
+        Вытаскивает из БД список дней месяца с их статусом занятости ('full' или 'partial').
         """
         query = """
-            SELECT EXTRACT(DAY FROM event_date)::INTEGER AS day
+            SELECT 
+                EXTRACT(DAY FROM event_date)::INTEGER AS day,
+                CASE 
+                    WHEN COUNT(*) FILTER (WHERE event_type = 'all_day') > 0 
+                         OR SUM(end_time - start_time) >= INTERVAL '24 hours' THEN 'full'
+                    ELSE 'partial'
+                END AS status
             FROM events
             WHERE user_id = $1 
               AND EXTRACT(YEAR FROM event_date) = $2
-              AND EXTRACT(MONTH FROM event_date) = $3;
+              AND EXTRACT(MONTH FROM event_date) = $3
+            GROUP BY event_date;
         """
 
-        # Выполняем асинхронный запрос. fetch returns Record объекты.
-        rows = await conn.fetch(query, user_id, year, month)
-
-        # Достаем из каждой строки поле 'day' и упаковываем в обычный список чисел
-        return [row["day"] for row in rows]
+        # Выполняем асинхронный запрос. fetch возвращает Record-объекты.
+        return await conn.fetch(query, user_id, year, month)
 
     @staticmethod
     async def get_events_by_date(

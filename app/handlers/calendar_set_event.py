@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from app.handlers.states import WAITING_FOR_TITLE, WAITING_FOR_DESC_CHOICE, WAITING_FOR_DESCRIPTION
+from app.handlers.states import WAITING_FOR_TITLE, WAITING_FOR_DESC_CHOICE, WAITING_FOR_DESCRIPTION, CHOOSING_TIME
 from app.core.calendar.services import CalendarService
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -25,7 +25,7 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                      f'Выберите другую дату или время\n',
                 show_alert=False
             )
-            return ConversationHandler.END
+            return CHOOSING_TIME
         else:
             # Сразу запоминаем тип события в контекст
             context.user_data['event_type'] = 'all_day'

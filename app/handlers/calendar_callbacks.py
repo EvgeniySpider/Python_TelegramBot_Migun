@@ -6,7 +6,7 @@ from app.handlers.calendar_keyboard import generate_time_options_keyboard
 from app.handlers.states import CHOOSING_TIME, CHOOSING_ACTION
 
 
-async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
 
     parts = query.data.split(":")
@@ -29,24 +29,22 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
         events = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
-        events_text = "Запланированные дела:\n" + \
-            "\n".join([f"• {e['title']}" for e in events]) + '\n\n'
-        context.user_data['events_text'] = events_text
-        return await handle_event_search_and_set_selection(context.user_data['events_text'], query, day, month, year)
+
+        if not events:
+            events_text = "На этот день ничего не запланировано.\n"
+            context.user_data['events_text'] = events_text
+            return await handle_time_selection_option((query, day, month, year), events_text)
+        else:
+            events_text = "Запланированные дела:\n" + \
+                "\n".join([f"• {e['title']}" for e in events]) + '\n\n'
+            context.user_data['events_text'] = events_text
+            return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 
 
-async def handle_event_search_and_set_selection(events_text, *args):
-    if events_text:
-        return await handle_options_with_exist_notes_in_day(events_text, args)
-    else:
-        return await handle_time_selection_option(args)
-
-
-async def handle_options_with_exist_notes_in_day(events_text, args):
+async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) -> int:
     query, day, month, year = args
-    # ---- СЦЕНАРИЙ А: НА ЭТОТ ДЕНЬ ЕСТЬ СОБЫТИЯ (Абсолютная унификация) ----
+    # ---- СЦЕНАРИЙ А: НА ЭТОТ ДЕНЬ ЕСТЬ СОБЫТИЯ ----
 
-    # Одинаковый, понятный набор кнопок для любой даты в календаре
     options_keyboard = [
         [
             InlineKeyboardButton("➕ Добавить", callback_data="action_create"),
@@ -64,23 +62,24 @@ async def handle_options_with_exist_notes_in_day(events_text, args):
         parse_mode="Markdown"
     )
 
-    # В будущем здесь будет возврат стейта меню действий, пока заглушка
     return CHOOSING_ACTION
 
 
-async def handle_time_selection_option(args, events_text=None):
+async def handle_time_selection_option(args: tuple, events_text: str = None) -> int:
     query, day, month, year = args
-    # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ ----
-    # Сразу запускаем сценарий создания (выбор формата времени)
+    # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ / ИЛИ НАЖАТА КНОПКА "ДОБАВИТЬ" ----
     time_markup = generate_time_options_keyboard()
-    events_message = "На этот день ничего не запланировано.\n" if events_text is None else events_text
+
+    # Подстраховка на случай, если events_text не прилетел из внешнего вызова
+    if not events_text:
+        events_text = "На этот день ничего не запланировано.\n"
 
     await query.edit_message_text(
         text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
-        f"{events_message}"
+        f"{events_text}"
         f"Укажите формат времени проведения события:",
         reply_markup=time_markup,
-        parse_mode = "Markdown"
+        parse_mode="Markdown"
     )
 
     return CHOOSING_TIME

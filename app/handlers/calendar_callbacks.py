@@ -35,8 +35,20 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
             context.user_data['events_text'] = events_text
             return await handle_time_selection_option((query, day, month, year), events_text)
         else:
+            raw_events = []
+            for el in events:
+                if el['start_time'] is None:
+                    raw_events.append(f"• {el['title']} (весь день)")
+                else:
+                    # Магия :02d жестко фиксирует два знака для часов и минут
+                    st_time = f'{el["start_time"].hour:02d}:{el["start_time"].minute:02d}'
+                    end_time = f'{el["end_time"].hour:02d}:{el["end_time"].minute:02d}'
+                    raw_events.append(
+                        f"• [{st_time} - {end_time}] {el['title']}")
+
+            # Собираем финальный текст в один проход
             events_text = "Запланированные дела:\n" + \
-                "\n".join([f"• {e['title']}" for e in events]) + '\n\n'
+                "\n".join(raw_events) + '\n\n'
             context.user_data['events_text'] = events_text
             return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 

@@ -32,7 +32,8 @@ calendar_conversation = ConversationHandler(
     
     states={
         CHOOSING_ACTION : [
-            CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete)$")
+            CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete)$"),
+            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
         ],
         CHOOSING_TIME: [
             # Ловим ТОЛЬКО кнопки времени (Весь день, Интервал, Точное время)

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.states import (
@@ -8,6 +8,7 @@ from app.handlers.states import (
     WAITING_FOR_TIME_INPUT
 )
 from app.handlers.calendar_keyboard import generate_yes_no_keyboards
+from app.core.calendar.repositories import CalendarRepository
 
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -66,6 +67,26 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     dt_start = datetime.combine(selected_date, start_time)
     dt_end = dt_start + timedelta(minutes=30)
     end_time = dt_end.time()
+
+    if dt_end.date() != selected_date:
+        end_time = time(23, 59, 59)
+    else:
+        end_time = dt_end.time()
+
+    async with context.application.database.connection() as conn:
+        is_busy_time = await CalendarRepository.has_time_conflict(
+            conn,
+            update.effective_user.id,
+            selected_date,
+            start_time,
+            end_time
+        )
+        if is_busy_time:
+            await update.message.reply_text(
+                text="❌ Ошибка: это время занято\n"
+                "Попробуйте ещё раз"
+            )
+            return WAITING_FOR_TIME_INPUT
 
     # 3. Сохраняем расчеты в оперативку (user_data)
     context.user_data['start_time'] = start_time

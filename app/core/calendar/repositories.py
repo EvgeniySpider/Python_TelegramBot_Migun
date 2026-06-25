@@ -52,3 +52,32 @@ class CalendarRepository:
         """
         # Возвращаем «сырые» записи из базы
         return await conn.fetch(query, user_id, event_date)
+
+    @staticmethod
+    async def has_time_conflict(
+        conn, 
+        user_id: int, 
+        event_date:datetime.date, 
+        start_time:datetime.time, 
+        end_time:datetime.time
+    ) -> bool:
+        """
+        Проверяет наличие конфликтов (пересечений) времени для новых событий.
+        Ищет пересечения среди существующих записей типов 'interval' и 'exact'.
+        """
+        query = """
+            WITH target_events AS (
+                SELECT start_time, end_time 
+                FROM events 
+                WHERE user_id = $1 
+                  AND event_date = $2
+                  AND event_type IN ('interval', 'exact')
+            )
+            SELECT EXISTS (
+                SELECT 1 
+                FROM target_events
+                WHERE $3::TIME < end_time 
+                  AND $4::TIME > start_time
+            );
+        """
+        return await conn.fetchval(query, user_id, event_date, start_time, end_time)

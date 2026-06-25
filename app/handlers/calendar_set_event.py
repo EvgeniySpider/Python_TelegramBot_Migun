@@ -7,7 +7,6 @@ from app.handlers.states import (
     WAITING_FOR_DESCRIPTION,
     WAITING_FOR_TIME_INPUT
 )
-from app.core.calendar.services import CalendarService
 from app.handlers.calendar_keyboard import generate_yes_no_keyboards
 
 
@@ -16,14 +15,6 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     parts = query.data.split(":")
     data = context.user_data['selected_date']
-
-    async with context.application.database.connection() as conn:
-        busy_days = await CalendarService.get_user_busy_days(
-            conn,
-            update.effective_user.id,
-            data.year,
-            data.month
-        )
 
     if parts[1] == "all_day":
         # Сразу запоминаем тип события в контекст

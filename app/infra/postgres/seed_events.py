@@ -25,7 +25,7 @@ def seed_test_data() -> None:
         (YOUR_TELEGRAM_ID, 'interval', 'Созвон по проекту', date(2026, 6, 18), time(14, 0, 0), time(15, 0, 0), 'Обсудить архитектуру бота'),
         
         # 3. Событие на конкретное (точное) время | Время окончания события + 30 минут от начала
-        (YOUR_TELEGRAM_ID, 'exact', 'Отключить компрессор', date(2026, 6, 25), time(19, 30, 0), time(20, 30, 0), 'Парк победы, взять мячик')
+        (YOUR_TELEGRAM_ID, 'exact', 'Отключить компрессор', date(2026, 6, 25), time(19, 30, 0), time(20, 0, 0), 'Парк победы, взять мячик')
     ]
 
     with psycopg2.connect(settings.secret_dsn.get_secret_value()) as conn:

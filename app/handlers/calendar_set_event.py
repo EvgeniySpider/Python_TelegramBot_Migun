@@ -1,11 +1,18 @@
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from app.handlers.states import WAITING_FOR_TITLE, WAITING_FOR_DESC_CHOICE, WAITING_FOR_DESCRIPTION, CHOOSING_TIME
+from app.handlers.states import (
+    WAITING_FOR_TITLE,
+    WAITING_FOR_DESC_CHOICE,
+    WAITING_FOR_DESCRIPTION,
+    CHOOSING_TIME,
+    WAITING_FOR_TIME_INPUT
+)
 from app.core.calendar.services import CalendarService
+
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    
 
     parts = query.data.split(":")
     data = context.user_data['selected_date']
@@ -21,8 +28,8 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if parts[1] == "all_day":
         if data.day in busy_days:
             await update.callback_query.answer(
-                text=f'❌ Ошибка: в эту дату у вас меропритие которое длится весь день.\n'
-                     f'Выберите другую дату или время\n',
+                text=f'❌ Ошибка: этот день полностью занят.\n'
+                f'Выберите другую дату\n',
                 show_alert=False
             )
             return CHOOSING_TIME
@@ -34,12 +41,69 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
             await query.edit_message_text(
                 text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
-                    f"Тип события: [ ☀️ Весь день ]\n\n"
-                    f"Укажите название мероприятия:\n"
-                    f"Например: [Поездка на дачу]"
+                f"Тип события: [ ☀️ Весь день ]\n\n"
+                f"Укажите название мероприятия:\n"
+                f"Например: [Поездка на дачу]"
             )
             return WAITING_FOR_TITLE
 
+    elif parts[1] == "exact":
+        # Если день забит наглухо, не даем создавать даже точечные события
+        if busy_days.get(data.day) == 'full':
+            await query.answer(
+                text=f'❌ Ошибка: этот день полностью занят.\n'
+                f'Выберите другую дату.',
+                show_alert=False
+            )
+            return CHOOSING_TIME
+        else:
+            context.user_data['event_type'] = 'exact'
+
+            await query.edit_message_text(
+                text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+                f"Тип события: [ ⏱️ Точное время ]\n\n"
+                f"⌨️ Введите время начала мероприятия в формате ЧЧ:ММ\n"
+                f"Например: [ 14:00 ] или [ 09:30 ]"
+            )
+            return WAITING_FOR_TIME_INPUT
+
+async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ловит строку времени, проверяет её формат, рассчитывает интервал +30 минут."""
+    raw_time = update.message.text.strip()
+    selected_date = context.user_data['selected_date']
+
+    # 1. Валидируем формат ЧЧ:ММ
+    try:
+        # Пытаемся распарсить время
+        parsed_time = datetime.strptime(raw_time, "%H:%M")
+        # Превращаем в чистый объект time для БД
+        start_time = parsed_time.time()
+    except ValueError:
+        # Если юзер ввёл херню — не меняем стейт, просим ввести заново
+        await update.message.reply_text(
+            text="❌ Неверный формат времени!\n"
+                 "Пожалуйста, введите время строго в формате ЧЧ:ММ (например, 15:30):"
+        )
+        return WAITING_FOR_TIME_INPUT
+
+    # 2. Логика интервала по умолчанию (+30 минут)
+    # Переводим в datetime для удобного математического сдвига через timedelta
+    dt_start = datetime.combine(selected_date, start_time)
+    dt_end = dt_start + timedelta(minutes=30)
+    end_time = dt_end.time()
+
+    # 3. Сохраняем расчеты в оперативку (user_data)
+    context.user_data['start_time'] = start_time
+    context.user_data['end_time'] = end_time
+
+    # Переводим на следующий шаг — ввод названия
+    await update.message.reply_text(
+        text=f"⏰ Время начала: {start_time.strftime('%H:%M')}\n"
+             f"⏳ Время окончания (авто): {end_time.strftime('%H:%M')}\n\n"
+             f"Укажите название мероприятия:\n"
+             f"Например: [ Выбросить мусор ]"
+    )
+    return WAITING_FOR_TITLE
 
 async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит название, сохраняет в контекст и предлагает инлайн-кнопки описания."""
@@ -57,7 +121,7 @@ async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(
         text=f"📌 Название «{event_title}» записано.\n\n"
-             f"Хотите ли вы добавить описание (заметку) к этому мероприятию?",
+        f"Хотите ли вы добавить описание (заметку) к этому мероприятию?",
         reply_markup=reply_markup
     )
     return WAITING_FOR_DESC_CHOICE
@@ -71,7 +135,7 @@ async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if query.data == "desc_no":
         # Юзер отказался от описания. Описание = None.
         context.user_data['description'] = None
-        
+
         # Переходим к финальной точке — сохранению в базу
         await _save_event_to_db(update, context)
         return ConversationHandler.END
@@ -87,7 +151,7 @@ async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def handle_description_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит текст описания, сохраняет его и вызывает запись в базу."""
     context.user_data['description'] = update.message.text
-    
+
     await _save_event_to_db(update, context)
     return ConversationHandler.END
 
@@ -96,7 +160,7 @@ async def handle_description_input(update: Update, context: ContextTypes.DEFAULT
 async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Берет все накопленные данные из контекста и делает один чистый INSERT."""
     user_id = update.effective_user.id
-    
+
     # Достаем всё, что накопили на прошлых шагах
     selected_date = context.user_data.get('selected_date')
     event_type = context.user_data.get('event_type')
@@ -122,7 +186,7 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         f"📌 Событие: {event_title}\n"
         f"⏰ Время: {'Весь день' if event_type == 'all_day' else f'{start_time} - {end_time}'}\n"
     )
-    
+
     if description:
         report_text += f"📝 Описание: {description}"
 

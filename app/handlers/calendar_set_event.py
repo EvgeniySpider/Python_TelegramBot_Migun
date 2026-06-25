@@ -26,46 +26,30 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
 
     if parts[1] == "all_day":
-        if data.day in busy_days:
-            await update.callback_query.answer(
-                text=f'❌ Ошибка: этот день полностью занят.\n'
-                f'Выберите другую дату\n',
-                show_alert=False
-            )
-            return CHOOSING_TIME
-        else:
-            # Сразу запоминаем тип события в контекст
-            context.user_data['event_type'] = 'all_day'
-            context.user_data['start_time'] = None
-            context.user_data['end_time'] = None
+        # Сразу запоминаем тип события в контекст
+        context.user_data['event_type'] = 'all_day'
+        context.user_data['start_time'] = None
+        context.user_data['end_time'] = None
 
-            await query.edit_message_text(
-                text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
-                f"Тип события: [ ☀️ Весь день ]\n\n"
-                f"Укажите название мероприятия:\n"
-                f"Например: [Поездка на дачу]"
-            )
-            return WAITING_FOR_TITLE
+        await query.edit_message_text(
+            text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+            f"Тип события: [ ☀️ Весь день ]\n\n"
+            f"Укажите название мероприятия:\n"
+            f"Например: [Поездка на дачу]"
+        )
+        return WAITING_FOR_TITLE
 
     elif parts[1] == "exact":
-        # Если день забит наглухо, не даем создавать даже точечные события
-        if busy_days.get(data.day) == 'full':
-            await query.answer(
-                text=f'❌ Ошибка: этот день полностью занят.\n'
-                f'Выберите другую дату.',
-                show_alert=False
-            )
-            return CHOOSING_TIME
-        else:
-            context.user_data['event_type'] = 'exact'
+        context.user_data['event_type'] = 'exact'
 
-            await query.edit_message_text(
-                text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
-                f"Тип события: [ ⏱️ Точное время ]\n\n"
-                f"⌨️ Введите время начала мероприятия в формате ЧЧ:ММ\n"
-                f"Например: [ 14:00 ] или [ 09:30 ]"
-            )
-            return WAITING_FOR_TIME_INPUT
+        await query.edit_message_text(
+            text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+            f"Тип события: [ ⏱️ Точное время ]\n\n"
+            f"⌨️ Введите время начала мероприятия в формате ЧЧ:ММ\n"
+            f"Например: [ 14:00 ] или [ 09:30 ]"
+        )
+        return WAITING_FOR_TIME_INPUT
+
 
 async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит строку времени, проверяет её формат, рассчитывает интервал +30 минут."""
@@ -99,11 +83,12 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Переводим на следующий шаг — ввод названия
     await update.message.reply_text(
         text=f"⏰ Время начала: {start_time.strftime('%H:%M')}\n"
-             f"⏳ Время окончания (авто): {end_time.strftime('%H:%M')}\n\n"
-             f"Укажите название мероприятия:\n"
-             f"Например: [ Выбросить мусор ]"
+        f"⏳ Время окончания (авто): {end_time.strftime('%H:%M')}\n\n"
+        f"Укажите название мероприятия:\n"
+        f"Например: [ Выбросить мусор ]"
     )
     return WAITING_FOR_TITLE
+
 
 async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит название, сохраняет в контекст и предлагает инлайн-кнопки описания."""

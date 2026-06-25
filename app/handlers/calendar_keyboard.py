@@ -106,3 +106,28 @@ def generate_time_options_keyboard() -> InlineKeyboardMarkup:
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def generate_options_keyboard() -> InlineKeyboardMarkup:
+    options_keyboard = [
+        [
+            InlineKeyboardButton("➕ Добавить", callback_data="action_create"),
+            InlineKeyboardButton("✏️ Изменить", callback_data="action_edit"),
+            InlineKeyboardButton("❌ Удалить", callback_data="action_delete")
+        ],
+        [
+            InlineKeyboardButton(text="🔙 Изменить дату",
+                                 callback_data="action_back_to_calendar")
+        ]
+    ]
+    return InlineKeyboardMarkup(options_keyboard)
+
+
+def generate_yes_no_keyboards() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да", callback_data="desc_yes"),
+            InlineKeyboardButton("❌ Нет", callback_data="desc_no")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)

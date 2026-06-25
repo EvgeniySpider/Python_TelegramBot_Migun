@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.states import (
     WAITING_FOR_TITLE,
     WAITING_FOR_DESC_CHOICE,
     WAITING_FOR_DESCRIPTION,
-    CHOOSING_TIME,
     WAITING_FOR_TIME_INPUT
 )
 from app.core.calendar.services import CalendarService
+from app.handlers.calendar_keyboard import generate_yes_no_keyboards
 
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -95,19 +95,10 @@ async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     event_title = update.message.text
     context.user_data['event_title'] = event_title
 
-    # Готовим инлайн-кнопки
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Да", callback_data="desc_yes"),
-            InlineKeyboardButton("❌ Нет", callback_data="desc_no")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(
         text=f"📌 Название «{event_title}» записано.\n\n"
         f"Хотите ли вы добавить описание (заметку) к этому мероприятию?",
-        reply_markup=reply_markup
+        reply_markup=generate_yes_no_keyboards
     )
     return WAITING_FOR_DESC_CHOICE
 

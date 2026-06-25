@@ -1,8 +1,8 @@
 import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes
 from app.core.calendar.repositories import CalendarRepository
-from app.handlers.calendar_keyboard import generate_time_options_keyboard
+from app.handlers.calendar_keyboard import generate_time_options_keyboard, generate_options_keyboard
 from app.handlers.states import CHOOSING_TIME, CHOOSING_ACTION
 
 
@@ -57,20 +57,11 @@ async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) 
     query, day, month, year = args
     # ---- СЦЕНАРИЙ А: НА ЭТОТ ДЕНЬ ЕСТЬ СОБЫТИЯ ----
 
-    options_keyboard = [
-        [
-            InlineKeyboardButton("➕ Добавить", callback_data="action_create"),
-            InlineKeyboardButton("✏️ Изменить", callback_data="action_edit"),
-            InlineKeyboardButton("❌ Удалить", callback_data="action_delete")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(options_keyboard)
-
     await query.edit_message_text(
         text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
         f"{events_text}"
         f"Выберите действие с расписанием:",
-        reply_markup=reply_markup,
+        reply_markup=generate_options_keyboard(),
         parse_mode="Markdown"
     )
 
@@ -80,7 +71,6 @@ async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) 
 async def handle_time_selection_option(args: tuple, events_text: str = None) -> int:
     query, day, month, year = args
     # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ / ИЛИ НАЖАТА КНОПКА "ДОБАВИТЬ" ----
-    time_markup = generate_time_options_keyboard()
 
     # Подстраховка на случай, если events_text не прилетел из внешнего вызова
     if not events_text:
@@ -90,7 +80,7 @@ async def handle_time_selection_option(args: tuple, events_text: str = None) -> 
         text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
         f"{events_text}"
         f"Укажите формат времени проведения события:",
-        reply_markup=time_markup,
+        reply_markup=generate_time_options_keyboard(),
         parse_mode="Markdown"
     )
 

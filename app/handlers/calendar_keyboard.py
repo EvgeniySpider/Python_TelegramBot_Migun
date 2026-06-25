@@ -6,7 +6,7 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
     """Генерирует календарь с inline-кнопками"""
     # 1. Получаем текстовое название месяца (пока на английском, потом русифицируем)
     if busy_days is None:
-        busy_days = set()
+        busy_days = {}
 
     RU_MONTHS = {
         1: "Январь",
@@ -53,11 +53,13 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
                     text=" ", callback_data="calendar_ignore"
                 ))
             else:
-                # 1. Определяем текст для кнопки
-                if day in busy_days:
-                    button_text = f"✅ {day}"
+                # 1. Определяем огонёк для full/partial дней
+                if busy_days.get(day) == 'full':
+                    button_text = f"🔴 {day}"
+                elif busy_days.get(day) == 'partial':
+                    button_text = f"🟡 {day}"
                 else:
-                    button_text = str(day)
+                    button_text = f"{day}"
 
                 # 2. ДОБАВЛЯЕМ КНОПКУ В РЯД (вынесли из внутреннего else)
                 row.append(InlineKeyboardButton(
@@ -90,13 +92,17 @@ def generate_time_options_keyboard() -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора формата времени для мероприятия."""
     keyboard = [
         [
-            InlineKeyboardButton(text="☀️ Весь день", callback_data="event_time:all_day"),
-            InlineKeyboardButton(text="⏱️ Точное время", callback_data="event_time:exact"),
-            InlineKeyboardButton(text="⏳ Интервал", callback_data="event_time:range")
+            InlineKeyboardButton(text="☀️ Весь день",
+                                 callback_data="event_time:all_day"),
+            InlineKeyboardButton(text="⏱️ Точное время",
+                                 callback_data="event_time:exact"),
+            InlineKeyboardButton(
+                text="⏳ Интервал", callback_data="event_time:range")
         ],
         # РЯД 2: Кнопка возврата к сетке календаря
         [
-            InlineKeyboardButton(text="🔙 Изменить дату", callback_data="action_back_to_calendar")
+            InlineKeyboardButton(text="🔙 Изменить дату",
+                                 callback_data="action_back_to_calendar")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)

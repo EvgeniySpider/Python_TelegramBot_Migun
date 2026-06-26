@@ -123,11 +123,23 @@ def generate_options_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(options_keyboard)
 
 
-def generate_yes_no_keyboards() -> InlineKeyboardMarkup:
+def generate_yes_no_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton("✅ Да", callback_data="desc_yes"),
             InlineKeyboardButton("❌ Нет", callback_data="desc_no")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def generate_confirm_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🗑️ Да, удалить", callback_data="confirm_delete_yes"),
+            InlineKeyboardButton(
+                "🔙 Нет, назад", callback_data="confirm_delete_no")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)

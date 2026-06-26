@@ -9,7 +9,7 @@ from app.handlers.states import (
     CHOOSING_TIME,
     WAITING_FOR_TIME_INPUT_INTERVAL
 )
-from app.handlers.calendar_keyboard import generate_yes_no_keyboards
+from app.handlers.calendar_keyboard import generate_yes_no_keyboard
 from app.core.calendar.repositories import CalendarRepository
 import re
 
@@ -219,7 +219,7 @@ async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(
         text=f"📌 Название «{event_title}» записано.\n\n"
         f"Хотите ли вы добавить описание (заметку) к этому мероприятию?",
-        reply_markup=generate_yes_no_keyboards()
+        reply_markup=generate_yes_no_keyboard()
     )
     return WAITING_FOR_DESC_CHOICE
 

@@ -14,7 +14,8 @@ from app.handlers.calendar_set_event import (
     handle_title_input,
     handle_desc_choice,
     handle_description_input,
-    handle_time_input
+    handle_time_input_exact,
+    handle_time_input_interval
 )
 from app.handlers.states import (
     CHOOSING_TIME,
@@ -22,7 +23,8 @@ from app.handlers.states import (
     WAITING_FOR_DESC_CHOICE,
     WAITING_FOR_DESCRIPTION,
     CHOOSING_ACTION,
-    WAITING_FOR_TIME_INPUT
+    WAITING_FOR_TIME_INPUT_EXACT,
+    WAITING_FOR_TIME_INPUT_INTERVAL
 )
 
 calendar_conversation = ConversationHandler(
@@ -42,8 +44,11 @@ calendar_conversation = ConversationHandler(
             # Точечный перехватчик кнопки "Назад"! Он сработает ТОЛЬКО на неё.
             CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
         ],
-        WAITING_FOR_TIME_INPUT: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_input)
+        WAITING_FOR_TIME_INPUT_EXACT: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_input_exact)
+        ],
+        WAITING_FOR_TIME_INPUT_INTERVAL : [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_input_interval)
         ],
         WAITING_FOR_TITLE: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_title_input)

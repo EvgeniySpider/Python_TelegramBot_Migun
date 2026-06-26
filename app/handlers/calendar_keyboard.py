@@ -97,7 +97,7 @@ def generate_time_options_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⏱️ Точное время",
                                  callback_data="event_time:exact"),
             InlineKeyboardButton(
-                text="⏳ Интервал", callback_data="event_time:range")
+                text="⏳ Интервал", callback_data="event_time:interval")
         ],
         # РЯД 2: Кнопка возврата к сетке календаря
         [

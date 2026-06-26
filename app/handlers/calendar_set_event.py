@@ -5,11 +5,13 @@ from app.handlers.states import (
     WAITING_FOR_TITLE,
     WAITING_FOR_DESC_CHOICE,
     WAITING_FOR_DESCRIPTION,
-    WAITING_FOR_TIME_INPUT,
-    CHOOSING_TIME
+    WAITING_FOR_TIME_INPUT_EXACT,
+    CHOOSING_TIME,
+    WAITING_FOR_TIME_INPUT_INTERVAL
 )
 from app.handlers.calendar_keyboard import generate_yes_no_keyboards
 from app.core.calendar.repositories import CalendarRepository
+import re
 
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -19,7 +21,7 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     data = context.user_data['selected_date']
 
     if parts[1] == "all_day":
-
+        context.user_data['event_type'] = 'all_day'
         async with context.application.database.connection() as conn:
             is_event = await CalendarRepository.get_events_by_date(
                 conn,
@@ -33,11 +35,6 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     show_alert=False
                 )
                 return CHOOSING_TIME
-
-        # Сразу запоминаем тип события в контекст
-        context.user_data['event_type'] = 'all_day'
-        context.user_data['start_time'] = None
-        context.user_data['end_time'] = None
 
         await query.edit_message_text(
             text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
@@ -56,10 +53,67 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"⌨️ Введите время начала мероприятия в формате ЧЧ:ММ\n"
             f"Например: [ 14:00 ] или [ 09:30 ]"
         )
-        return WAITING_FOR_TIME_INPUT
+        return WAITING_FOR_TIME_INPUT_EXACT
+
+    elif parts[1] == "interval":
+        context.user_data['event_type'] = 'interval'
+        await query.edit_message_text(
+            text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+            f"Тип события: [ ⏳ Интервал ]\n\n"
+            f"⌨️ Введите время начала и конца мероприятия в формате ЧЧ:ММ-ЧЧ:ММ\n"
+            f"Например: [ 12:00-13:00 ] или [ 09:30-11:45 ]"
+        )
+        return WAITING_FOR_TIME_INPUT_INTERVAL
 
 
-async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw_time = update.message.text.strip()
+    selected_date = context.user_data['selected_date']
+
+    time_pattern = re.compile(
+        r'^((0[0-9]|1[0-9]|2[0-3]):[0-5][0-9])-((0[0-9]|1[0-9]|2[0-3]):[0-5][0-9])')
+    match_object = time_pattern.fullmatch(raw_time)
+
+    if match_object is None:
+        await update.message.reply_text(
+            text="❌ Неверный формат времени!\n"
+                 "Пожалуйста, введите время строго в формате ЧЧ:ММ-ЧЧ-ММ (например, 15:30-16:30):"
+        )
+        return WAITING_FOR_TIME_INPUT_INTERVAL
+
+    raw_start_time, raw_end_time = match_object[1], match_object[3]
+
+    start_time = datetime.strptime(raw_start_time, "%H:%M").time()
+    end_time = datetime.strptime(raw_end_time, "%H:%M").time()
+
+    async with context.application.database.connection() as conn:
+        is_busy_time = await CalendarRepository.has_time_conflict(
+            conn,
+            update.effective_user.id,
+            selected_date,
+            start_time,
+            end_time
+        )
+        if is_busy_time:
+            await update.message.reply_text(
+                text="❌ Ошибка: это время занято\n"
+                "Попробуйте ещё раз"
+            )
+            return WAITING_FOR_TIME_INPUT_INTERVAL
+
+    context.user_data['start_time'] = start_time
+    context.user_data['end_time'] = end_time
+
+    await update.message.reply_text(
+        text=f"⏰ Время начала: {start_time.strftime('%H:%M')}\n"
+        f"⏳ Время окончания: {end_time.strftime('%H:%M')}\n\n"
+        f"Укажите название мероприятия:\n"
+        f"Например: [ Выбросить мусор ]"
+    )
+    return WAITING_FOR_TITLE
+
+
+async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит строку времени, проверяет её формат, рассчитывает интервал +30 минут."""
     raw_time = update.message.text.strip()
     selected_date = context.user_data['selected_date']
@@ -76,7 +130,7 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             text="❌ Неверный формат времени!\n"
                  "Пожалуйста, введите время строго в формате ЧЧ:ММ (например, 15:30):"
         )
-        return WAITING_FOR_TIME_INPUT
+        return WAITING_FOR_TIME_INPUT_EXACT
 
     # 2. Логика интервала по умолчанию (+30 минут)
     # Переводим в datetime для удобного математического сдвига через timedelta
@@ -102,7 +156,7 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 text="❌ Ошибка: это время занято\n"
                 "Попробуйте ещё раз"
             )
-            return WAITING_FOR_TIME_INPUT
+            return WAITING_FOR_TIME_INPUT_EXACT
 
     # 3. Сохраняем расчеты в оперативку (user_data)
     context.user_data['start_time'] = start_time
@@ -126,7 +180,7 @@ async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(
         text=f"📌 Название «{event_title}» записано.\n\n"
         f"Хотите ли вы добавить описание (заметку) к этому мероприятию?",
-        reply_markup=generate_yes_no_keyboards
+        reply_markup=generate_yes_no_keyboards()
     )
     return WAITING_FOR_DESC_CHOICE
 

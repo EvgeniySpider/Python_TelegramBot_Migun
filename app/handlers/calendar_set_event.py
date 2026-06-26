@@ -5,7 +5,8 @@ from app.handlers.states import (
     WAITING_FOR_TITLE,
     WAITING_FOR_DESC_CHOICE,
     WAITING_FOR_DESCRIPTION,
-    WAITING_FOR_TIME_INPUT
+    WAITING_FOR_TIME_INPUT,
+    CHOOSING_TIME
 )
 from app.handlers.calendar_keyboard import generate_yes_no_keyboards
 from app.core.calendar.repositories import CalendarRepository
@@ -18,6 +19,21 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     data = context.user_data['selected_date']
 
     if parts[1] == "all_day":
+
+        async with context.application.database.connection() as conn:
+            is_event = await CalendarRepository.get_events_by_date(
+                conn,
+                update.effective_user.id,
+                data
+            )
+            if is_event:
+                await query.answer(
+                    text=f'❌ Ошибка: этот день частично занят\n'
+                    f'Выберите другую дату\n',
+                    show_alert=False
+                )
+                return CHOOSING_TIME
+
         # Сразу запоминаем тип события в контекст
         context.user_data['event_type'] = 'all_day'
         context.user_data['start_time'] = None

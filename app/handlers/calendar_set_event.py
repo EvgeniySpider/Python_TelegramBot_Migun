@@ -61,30 +61,56 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
             f"Тип события: [ ⏳ Интервал ]\n\n"
             f"⌨️ Введите время начала и конца мероприятия в формате ЧЧ:ММ-ЧЧ:ММ\n"
-            f"Например: [ 12:00-13:00 ] или [ 09:30-11:45 ]"
+            f"Например: [ 9-10 ], [ 6:30-8:30 ] или [ 14-16:30 ]"
         )
         return WAITING_FOR_TIME_INPUT_INTERVAL
 
 
 async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    raw_time = update.message.text.strip()
+    raw_time = update.message.text.strip().replace(' ', '')
     selected_date = context.user_data['selected_date']
 
-    time_pattern = re.compile(
-        r'^((0[0-9]|1[0-9]|2[0-3]):[0-5][0-9])-((0[0-9]|1[0-9]|2[0-3]):[0-5][0-9])')
+    time_pattern = re.compile(r'^(\d{1,2}(?::\d{2})?)-(\d{1,2}(?::\d{2})?)$')
     match_object = time_pattern.fullmatch(raw_time)
 
     if match_object is None:
         await update.message.reply_text(
             text="❌ Неверный формат времени!\n"
-                 "Пожалуйста, введите время строго в формате ЧЧ:ММ-ЧЧ-ММ (например, 15:30-16:30):"
+                 "Пожалуйста, введите интервал (например: 9-10, 09:30-11 или 15:00-16:30):"
         )
         return WAITING_FOR_TIME_INPUT_INTERVAL
 
-    raw_start_time, raw_end_time = match_object[1], match_object[3]
+    raw_start, raw_end = match_object[1], match_object[2]
+    # Вспомогательная функция для превращения "9" в "09:00", а "14:30" в "14:30"
 
-    start_time = datetime.strptime(raw_start_time, "%H:%M").time()
-    end_time = datetime.strptime(raw_end_time, "%H:%M").time()
+    def normalize_time_str(t_str: str) -> str:
+        if ":" not in t_str:
+            # Перевод в int уберёт проблемы с "09" -> "09:00"
+            return f"{int(t_str):02d}:00"
+        else:
+            hours, minutes = t_str.split(":")
+            return f"{int(hours):02d}:{minutes}"
+
+    try:
+        start_clean = normalize_time_str(raw_start)
+        end_clean = normalize_time_str(raw_end)
+
+        start_time = datetime.strptime(start_clean, "%H:%M").time()
+        end_time = datetime.strptime(end_clean, "%H:%M").time()
+    except ValueError:
+        # Сработает, если юзер ввёл несуществующее время, например "25:00-29:00" или "12:65"
+        await update.message.reply_text(
+            text="❌ Введено некорректное время суток (максимум 23:59)!\n"
+            "Попробуйте ещё раз:"
+        )
+        return WAITING_FOR_TIME_INPUT_INTERVAL
+
+    if end_time < start_time:
+        await update.message.reply_text(
+            text="❌ Ошибка: время начала не может быть позже времени окончания\n"
+            "Попробуйте ещё раз:"
+        )
+        return WAITING_FOR_TIME_INPUT_INTERVAL
 
     async with context.application.database.connection() as conn:
         is_busy_time = await CalendarRepository.has_time_conflict(
@@ -97,7 +123,7 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
         if is_busy_time:
             await update.message.reply_text(
                 text="❌ Ошибка: это время занято\n"
-                "Попробуйте ещё раз"
+                "Попробуйте ещё раз:"
             )
             return WAITING_FOR_TIME_INPUT_INTERVAL
 

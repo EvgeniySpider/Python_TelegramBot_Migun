@@ -66,7 +66,8 @@ calendar_conversation = ConversationHandler(
     },
     
     fallbacks=[
-        CommandHandler("cancel", lambda u, c: ConversationHandler.END) 
+        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
+        CommandHandler("calendar", calendar_command)
     ],
     
     per_message=False,

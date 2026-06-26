@@ -16,22 +16,15 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         selected_date = context.user_data.get('selected_date')
 
         events_text = context.user_data.get('events_text', None)
+        month_busy_days = context.user_data.get('month_busy_days', {})
 
-        async with context.application.database.connection() as conn:
-            record_events_rows = await CalendarService.get_user_busy_days(
-                conn,
-                update.effective_user.id,
-                selected_date.year,
-                selected_date.month
+        if month_busy_days.get(selected_date.day) == 'full':
+            await query.answer(
+                text=f'❌ Ошибка: этот день полностью занят.\n'
+                f'Выберите другую дату\n',
+                show_alert=False
             )
-
-            if record_events_rows.get(selected_date.day) == 'full':
-                await query.answer(
-                    text=f'❌ Ошибка: этот день полностью занят.\n'
-                    f'Выберите другую дату\n',
-                    show_alert=False
-                )
-                return CHOOSING_TIME
+            return CHOOSING_TIME
 
         args = (query, selected_date.day,
                 selected_date.month, selected_date.year)

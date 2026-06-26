@@ -18,23 +18,21 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     query = update.callback_query
 
     parts = query.data.split(":")
-    data = context.user_data['selected_date']
+    data = context.user_data.get('selected_date')
+
+    events_text = context.user_data['events_text']
 
     if parts[1] == "all_day":
         context.user_data['event_type'] = 'all_day'
-        async with context.application.database.connection() as conn:
-            is_event = await CalendarRepository.get_events_by_date(
-                conn,
-                update.effective_user.id,
-                data
+        month_busy_days = context.user_data.get('month_busy_days', {})
+
+        if data.day in month_busy_days:
+            await query.answer(
+                text=f'❌ Ошибка: этот день частично занят\n'
+                f'Выберите другую дату\n',
+                show_alert=False
             )
-            if is_event:
-                await query.answer(
-                    text=f'❌ Ошибка: этот день частично занят\n'
-                    f'Выберите другую дату\n',
-                    show_alert=False
-                )
-                return CHOOSING_TIME
+            return CHOOSING_TIME
 
         await query.edit_message_text(
             text=f"Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
@@ -48,7 +46,8 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data['event_type'] = 'exact'
 
         await query.edit_message_text(
-            text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+            text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n\n"
+            f"{events_text}"
             f"Тип события: [ ⏱️ Точное время ]\n\n"
             f"⌨️ Введите время начала мероприятия в формате ЧЧ:ММ\n"
             f"Например: [ 14:00 ] или [ 09:30 ]"
@@ -58,7 +57,8 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     elif parts[1] == "interval":
         context.user_data['event_type'] = 'interval'
         await query.edit_message_text(
-            text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n"
+            text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n\n"
+            f"{events_text}"
             f"Тип события: [ ⏳ Интервал ]\n\n"
             f"⌨️ Введите время начала и конца мероприятия в формате ЧЧ:ММ-ЧЧ:ММ\n"
             f"Например: [ 9-10 ], [ 6:30-8:30 ] или [ 14-16:30 ]"

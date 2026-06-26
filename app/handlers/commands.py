@@ -28,7 +28,7 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             year=now.year,
             month=now.month
         )
-
+    context.user_data['month_busy_days'] = busy_days
     # 3. Генерируем клавиатуру с учётом полученных галочек
     calendar_markup: InlineKeyboardMarkup = generate_calendar_keyboard(
         year=now.year,

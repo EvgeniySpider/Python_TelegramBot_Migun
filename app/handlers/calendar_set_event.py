@@ -141,28 +141,42 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
 
 async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит строку времени, проверяет её формат, рассчитывает интервал +30 минут."""
-    raw_time = update.message.text.strip()
+    raw_time = update.message.text.strip().replace(' ', '')
     selected_date = context.user_data['selected_date']
 
-    # 1. Валидируем формат ЧЧ:ММ
-    try:
-        # Пытаемся распарсить время
-        parsed_time = datetime.strptime(raw_time, "%H:%M")
-        # Превращаем в чистый объект time для БД
-        start_time = parsed_time.time()
-    except ValueError:
-        # Если юзер ввёл херню — не меняем стейт, просим ввести заново
+    # 1. Проверяем структуру регуляркой (допускаем "9", "09:30", "14")
+    time_pattern = re.compile(r'^(\d{1,2})(?::(\d{2}))?$')
+    match_object = time_pattern.fullmatch(raw_time)
+
+    if match_object is None:
         await update.message.reply_text(
             text="❌ Неверный формат времени!\n"
-                 "Пожалуйста, введите время строго в формате ЧЧ:ММ (например, 15:30):"
+                 "Пожалуйста, введите время (например: 9, 09:30 или 15:00):"
         )
         return WAITING_FOR_TIME_INPUT_EXACT
 
-    # 2. Логика интервала по умолчанию (+30 минут)
-    # Переводим в datetime для удобного математического сдвига через timedelta
+    hours, minutes = match_object[1], match_object[2]
+
+    # Нормализуем строку времени (приводим к строгому ЧЧ:ММ)
+    if minutes is None:
+        clean_time = f"{int(hours):02d}:00"
+    else:
+        clean_time = f"{int(hours):02d}:{minutes}"
+
+    # 2. Проверяем логические границы времени суток
+    try:
+        start_time = datetime.strptime(clean_time, "%H:%M").time()
+    except ValueError:
+        # Сработает конкретно на "25:00", "14:65" и т.д.
+        await update.message.reply_text(
+            text="❌ Введено некорректное время суток (максимум 23:59)!\n"
+                 "Попробуйте ещё раз:"
+        )
+        return WAITING_FOR_TIME_INPUT_EXACT
+
+    # 3. Логика интервала по умолчанию (+30 минут)
     dt_start = datetime.combine(selected_date, start_time)
     dt_end = dt_start + timedelta(minutes=30)
-    end_time = dt_end.time()
 
     if dt_end.date() != selected_date:
         end_time = time(23, 59, 59)
@@ -180,15 +194,14 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
         if is_busy_time:
             await update.message.reply_text(
                 text="❌ Ошибка: это время занято\n"
-                "Попробуйте ещё раз"
+                     "Попробуйте ещё раз:"
             )
             return WAITING_FOR_TIME_INPUT_EXACT
 
-    # 3. Сохраняем расчеты в оперативку (user_data)
+    # 4. Сохраняем расчеты в оперативку (user_data)
     context.user_data['start_time'] = start_time
     context.user_data['end_time'] = end_time
 
-    # Переводим на следующий шаг — ввод названия
     await update.message.reply_text(
         text=f"⏰ Время начала: {start_time.strftime('%H:%M')}\n"
         f"⏳ Время окончания (авто): {end_time.strftime('%H:%M')}\n\n"

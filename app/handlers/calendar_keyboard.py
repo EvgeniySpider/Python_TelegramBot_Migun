@@ -158,7 +158,7 @@ def generate_numbered_events_keyboard(count) -> InlineKeyboardMarkup:
 
     extra_keyboard = [
         [
-            InlineKeyboardButton("❌ Удалить все события ❌",
+            InlineKeyboardButton("❌ Удалить все события",
                                  callback_data="del_num:everything"),
             InlineKeyboardButton("🔙  Назад",
                                  callback_data="del_num:cancel")

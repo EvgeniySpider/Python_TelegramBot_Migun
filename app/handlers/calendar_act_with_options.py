@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.calendar_callbacks import handle_time_selection_option
 from app.handlers.commands import calendar_command
-from app.handlers.states import CHOOSING_TIME, CHOOSING_EVENT_TO_DELETE
+from app.handlers.states import CHOOSING_TIME, CHOOSING_EVENT_TO_DELETE, CONFIRMING_DELETE
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
 
 
@@ -34,25 +34,23 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
     # Заглушки под остальные кнопки на будущее
     elif query.data == "action_edit":
         pass
+
     elif query.data == "action_delete":
         event_count = len(current_day_events)
         # СЦЕНАРИЙ 1: Событие ровно одно и это "Весь день"
         # Проверяем либо через структуру данных, либо через твою идею с текстом: "(весь день)" in events_text
         if event_count == 1 and current_day_events[0]['event_type'] == 'all_day':
-            event = current_day_events[0]
+            event_rec = current_day_events[0]
 
             # Сохраняем ID этого единственного события в контекст для будущего SQL-запроса DELETE
-            context.user_data['delete_event_id'] = event['id']
+            context.user_data['delete_event_id'] = event_rec['id']
+            context.user_data['column_name'] = 'id'
+            delete_text = 'мероприятие на весь день?'
+            event = f'📌 *Событие*: {event_rec['title']}\n'
 
-            await query.edit_message_text(
-                text=f"❓ *Вы уверены, что хотите удалить мероприятие на весь день?*\n\n"
-                f"📌 *Событие*: {event['title']}\n"
-                f"📅 *Дата*: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n\n"
-                f"⚠️ Это действие полностью сотрет заметку.",
-                reply_markup=generate_confirm_keyboard(),
-                parse_mode="Markdown"
-            )
-            return CHOOSING_EVENT_TO_DELETE
+            # async def confirm_to_delete(query, event, selected_date, delete_text):
+            state = await confirm_to_delete(query, event, selected_date, delete_text)
+            return state
 
         # СЦЕНАРИИ 2 и 3: Событий несколько
         else:
@@ -70,22 +68,27 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                     f'{'\n'.join(numbered_events)}',
                     reply_markup=generate_numbered_events_keyboard(event_count)
                 )
+
+                return CHOOSING_EVENT_TO_DELETE
             else:
                 pass
-            return CHOOSING_EVENT_TO_DELETE
 
-    return state
-
-'''[<Record id=9 title='Погулять с Греем' start_time=datetime.time(9, 0)
- end_time=datetime.time(10, 0) event_type='interval'>,
-<Record id=5 title='Выбросить мусор' start_time=datetime.time(12, 0) end_time=datetime.time(12, 30) event_type='exact'>,
-<Record id=4 title='Выбросить мусор' start_time=datetime.time(12, 45) end_time=datetime.time(13, 15) event_type='exact'>]
-'''
 
 # --- ТОЧЕЧНЫЙ ХЭНДЛЕР ВОЗВРАТА К КАЛЕНДАРЮ ---
 async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Гасим часики
     await update.callback_query.answer()
     await calendar_command(update, context)
-
     return ConversationHandler.END
+
+
+async def confirm_to_delete(query, event, selected_date, delete_text):
+    await query.edit_message_text(
+        text=f"❓ *Вы уверены, что хотите удалить {delete_text}*\n\n"
+        f"{event}"
+        f"📅 *Дата*: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n\n"
+        f"⚠️ Это действие полностью сотрет заметку.",
+        reply_markup=generate_confirm_keyboard(),
+        parse_mode="Markdown"
+    )
+    return CONFIRMING_DELETE

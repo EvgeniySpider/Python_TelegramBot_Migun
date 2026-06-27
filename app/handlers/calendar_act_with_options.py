@@ -2,8 +2,8 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.calendar_callbacks import handle_time_selection_option
 from app.handlers.commands import calendar_command
-from app.handlers.states import CHOOSING_TIME, CONFIRMING_DELETE
-from app.handlers.calendar_keyboard import generate_confirm_keyboard
+from app.handlers.states import CHOOSING_TIME, CHOOSING_EVENT_TO_DELETE
+from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
 
 
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -35,10 +35,10 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
     elif query.data == "action_edit":
         pass
     elif query.data == "action_delete":
-
+        event_count = len(current_day_events)
         # СЦЕНАРИЙ 1: Событие ровно одно и это "Весь день"
         # Проверяем либо через структуру данных, либо через твою идею с текстом: "(весь день)" in events_text
-        if len(current_day_events) == 1 and current_day_events[0]['event_type'] == 'all_day':
+        if event_count == 1 and current_day_events[0]['event_type'] == 'all_day':
             event = current_day_events[0]
 
             # Сохраняем ID этого единственного события в контекст для будущего SQL-запроса DELETE
@@ -52,17 +52,35 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=generate_confirm_keyboard(),
                 parse_mode="Markdown"
             )
-            return CONFIRMING_DELETE
+            return CHOOSING_EVENT_TO_DELETE
 
         # СЦЕНАРИИ 2 и 3: Событий несколько
         else:
-            await query.edit_message_text(
-                text="Здесь будет логика выбора конкретной кнопки (Сценарии 2 и 3). Скоро напишем!"
-            )
-            return ConversationHandler.END
+            if event_count < 11:
+                numbered_events = []
+                for i, rec in enumerate(current_day_events):
+                    st_time = f'{rec["start_time"].hour:02d}:{rec["start_time"].minute:02d}'
+                    end_time = f'{rec["end_time"].hour:02d}:{rec["end_time"].minute:02d}'
+                    st = f'[ {i+1} ]    {st_time} - {end_time} {rec['title']}'
+
+                    numbered_events.append(st)
+
+                await query.edit_message_text(
+                    text="Нажмите на номер события который хотите удалить\n\n"
+                    f'{'\n'.join(numbered_events)}',
+                    reply_markup=generate_numbered_events_keyboard(event_count)
+                )
+            else:
+                pass
+            return CHOOSING_EVENT_TO_DELETE
 
     return state
 
+'''[<Record id=9 title='Погулять с Греем' start_time=datetime.time(9, 0)
+ end_time=datetime.time(10, 0) event_type='interval'>,
+<Record id=5 title='Выбросить мусор' start_time=datetime.time(12, 0) end_time=datetime.time(12, 30) event_type='exact'>,
+<Record id=4 title='Выбросить мусор' start_time=datetime.time(12, 45) end_time=datetime.time(13, 15) event_type='exact'>]
+'''
 
 # --- ТОЧЕЧНЫЙ ХЭНДЛЕР ВОЗВРАТА К КАЛЕНДАРЮ ---
 async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

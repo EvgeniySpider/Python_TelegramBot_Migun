@@ -2,6 +2,7 @@ from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_d
 from telegram import Update
 from telegram.ext import ContextTypes,  ConversationHandler
 from app.handlers.commands import calendar_command
+from app.handlers.states import CHOOSING_ACTION
 
 
 async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -31,19 +32,28 @@ async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
     # Если пользователь нажал "Нет, назад"
-    elif query.data == "confirm_delete_no":
+    else:
         # Чистим только ID удаления, массив событий оставляем
         context.user_data.pop('delete_event_id', None)
-
         events_text = context.user_data.get('events_text', "")
         selected_date = context.user_data.get('selected_date')
 
         # Возвращаем меню из 3-х кнопок ("Добавить", "Изменить", "Удcaалить")
         args = (query, selected_date.day,
                 selected_date.month, selected_date.year)
-        from app.handlers.states import CHOOSING_ACTION
 
         await handle_options_with_exist_notes_in_day(events_text, args)
         return CHOOSING_ACTION
 
-    return ConversationHandler.END
+
+async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+
+    if query.data == 'del_num:cancel':
+        state = await handle_delete_confirmation(update, context)
+        return state
+    elif query.data == 'del_num:everything':
+        pass
+    else:
+        id_event = int(query.data.split(':')[1]) # 0
+        del_id = context.user_data.get('current_day_events', [])[id_event]

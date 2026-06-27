@@ -133,7 +133,7 @@ def generate_yes_no_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-def generate_confirm_keyboard():
+def generate_confirm_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton(
@@ -142,4 +142,28 @@ def generate_confirm_keyboard():
                 "🔙 Нет, назад", callback_data="confirm_delete_no")
         ]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def generate_numbered_events_keyboard(count) -> InlineKeyboardMarkup:
+    keyboard = [[], []]
+
+    for c in range(count):
+        button = InlineKeyboardButton(
+            f"{c+1}", callback_data=f"del_num:{c}")
+        if c < 5:
+            keyboard[0].append(button)
+        else:
+            keyboard[1].append(button)
+
+    extra_keyboard = [
+        [
+            InlineKeyboardButton("❌ Удалить все события ❌",
+                                 callback_data="del_num:everything"),
+            InlineKeyboardButton("🔙  Назад",
+                                 callback_data="del_num:cancel")
+        ]
+    ]
+    keyboard.extend(extra_keyboard)
+
     return InlineKeyboardMarkup(keyboard)

@@ -45,7 +45,7 @@ class CalendarRepository:
         Возвращает список Record-объектов со всеми полями.
         """
         query = """
-            SELECT id, title, start_time, end_time, event_type
+            SELECT id, title, start_time, end_time, event_type, event_date
             FROM events
             WHERE user_id = $1 AND event_date = $2
             ORDER BY start_time NULLS FIRST;
@@ -55,11 +55,11 @@ class CalendarRepository:
 
     @staticmethod
     async def has_time_conflict(
-        conn, 
-        user_id: int, 
-        event_date:datetime.date, 
-        start_time:datetime.time, 
-        end_time:datetime.time
+        conn: asyncpg.Connection,
+        user_id: int,
+        event_date: datetime.date,
+        start_time: datetime.time,
+        end_time: datetime.time
     ) -> bool:
         """
         Проверяет наличие конфликтов (пересечений) времени для новых событий.
@@ -81,3 +81,22 @@ class CalendarRepository:
             );
         """
         return await conn.fetchval(query, user_id, event_date, start_time, end_time)
+
+    @staticmethod
+    async def delete_events_by_filter(
+        conn: asyncpg.Connection,
+        column_name: str,  # Сюда передаем строго строку "id" или "event_date"
+        # Сюда передаем конкретный int (ID) или datetime.date
+        value
+    ):
+        # Валидация для защиты от SQL-инъекций (перфекционизм и безопасность!)
+        if column_name not in ('id', 'event_date'):
+            raise ValueError(
+                f"Недопустимое имя столбца для удаления: {column_name}")
+
+        # Формируем строку запроса динамически, подставляя имя столбца безопасным путем
+        query = f'''
+            DELETE FROM events
+            WHERE {column_name} = $1;
+        '''
+        await conn.execute(query, value)

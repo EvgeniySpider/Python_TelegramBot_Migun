@@ -45,7 +45,7 @@ class CalendarRepository:
         Возвращает список Record-объектов со всеми полями.
         """
         query = """
-            SELECT title, start_time, end_time, event_type
+            SELECT id, title, start_time, end_time, event_type
             FROM events
             WHERE user_id = $1 AND event_date = $2
             ORDER BY start_time NULLS FIRST;

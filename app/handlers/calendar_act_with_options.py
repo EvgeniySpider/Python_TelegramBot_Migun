@@ -35,8 +35,6 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
     elif query.data == "action_edit":
         pass
     elif query.data == "action_delete":
-        # Гасим часики штатно, так как переходим к процессу удаления
-        await query.answer()
 
         # СЦЕНАРИЙ 1: Событие ровно одно и это "Весь день"
         # Проверяем либо через структуру данных, либо через твою идею с текстом: "(весь день)" in events_text

@@ -9,13 +9,14 @@ from telegram.ext import (
 from app.handlers.commands import start, calendar_command
 from app.handlers.calendar_act_with_options import handle_options_click, handle_back_to_calendar_click
 from app.handlers.calendar_callbacks import handle_calendar_click
+from app.handlers.calendar_delete_event import handle_delete_confirmation
 from app.handlers.calendar_set_event import (
     handle_set_event,
     handle_title_input,
     handle_desc_choice,
     handle_description_input,
     handle_time_input_exact,
-    handle_time_input_interval
+    handle_time_input_interval,
 )
 from app.handlers.states import (
     CHOOSING_TIME,
@@ -24,7 +25,8 @@ from app.handlers.states import (
     WAITING_FOR_DESCRIPTION,
     CHOOSING_ACTION,
     WAITING_FOR_TIME_INPUT_EXACT,
-    WAITING_FOR_TIME_INPUT_INTERVAL
+    WAITING_FOR_TIME_INPUT_INTERVAL,
+    CONFIRMING_DELETE
 )
 
 calendar_conversation = ConversationHandler(
@@ -36,6 +38,9 @@ calendar_conversation = ConversationHandler(
         CHOOSING_ACTION : [
             CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete)$"),
             CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
+        ],
+        CONFIRMING_DELETE : [
+            CallbackQueryHandler(handle_delete_confirmation, pattern=r"^confirm_delete_(yes|no)$")
         ],
         CHOOSING_TIME: [
             # Ловим ТОЛЬКО кнопки времени (Весь день, Интервал, Точное время)

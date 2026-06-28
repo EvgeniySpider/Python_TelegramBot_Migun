@@ -10,6 +10,7 @@ from app.handlers.states import (
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
 from app.core.calendar.utils import format_event_time
 
+
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
 
@@ -64,11 +65,10 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             # 1. Единый цикл сборки текстового представления событий
             numbered_events = []
             for i, rec in enumerate(current_day_events):
-                st_time = f'{rec["start_time"].hour:02d}:{rec["start_time"].minute:02d}'
-                end_time = f'{rec["end_time"].hour:02d}:{rec["end_time"].minute:02d}'
-
+                event_time = format_event_time(
+                    rec['start_time'], rec['end_time'])
                 # Используем универсальный формат отображения списка
-                st = f'[ {i+1} ]    {st_time} - {end_time} {rec["title"]}'
+                st = f'[ {i+1} ]    [{event_time}] {rec["title"]}'
                 numbered_events.append(st)
 
             events_list_text = '\n'.join(numbered_events)
@@ -83,12 +83,14 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 return CHOOSING_EVENT_TO_DELETE
             else:
-                # Сценарий 3: Событий слишком много (>10) — убираем кнопки, ждем текст
+                # Сценарий 3: Событий > 10 — просто вызываем БЕЗ аргументов! 
+                # Юзер получит только две нижние кнопки, а бот будет ждать цифру текстом.
                 await query.edit_message_text(
-                    text="⚠️ Событий слишком много для отображения кнопок.\n"
-                         "**Пришлите в ответном сообщении номер (цифру)** события, которое хотите удалить:\n\n"
+                    text="⚠️ Событий слишком много для отображения кнопок-номеров.\n\n"
+                         "1️⃣ **Пришлите цифру (номер) события** в ответном сообщении, чтобы удалить его отдельно.\n"
+                         "2️⃣ Либо нажмите кнопку ниже, чтобы очистить весь день разом:\n\n"
                          f"{events_list_text}",
-                    reply_markup=None,
+                    reply_markup=generate_numbered_events_keyboard(), # Вот она, магия!
                     parse_mode="Markdown"
                 )
                 return TYPING_EVENT_NUMBER_TO_DELETE
@@ -167,8 +169,8 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     selected_date = context.user_data.get('selected_date')
     delete_text = f"событие № {chosen_number}?", "эту заметку."
 
-
-    event_time = format_event_time(event_rec["start_time"], event_rec["end_time"])
+    event_time = format_event_time(
+        event_rec["start_time"], event_rec["end_time"])
     event = f"📌 *Событие*: [{event_time}] {event_rec['title']}\n"
 
     state = await confirm_to_delete(update, event, selected_date, delete_text)

@@ -7,6 +7,7 @@ from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_act_with_options import confirm_to_delete
 from app.core.calendar.utils import format_event_time
 
+
 async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     # Если пользователь нажал "Да, удалить"
@@ -63,7 +64,34 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         state = await handle_delete_confirmation(update, context)
         return state
     elif query.data == 'del_num:everything':
-        pass
+        selected_date = context.user_data.get('selected_date')
+        current_day_events = context.user_data.get('current_day_events', [])
+
+        # 1. Готовим таргеты для SQL-запроса (удаляем пачкой по дате)
+        # Передаем саму дату
+        context.user_data['delete_event_id'] = selected_date
+        # Таргетим колонку даты в БД
+        context.user_data['column_name'] = 'event_date'
+
+        destroyed_events = []
+        for el in current_day_events:
+            event_time = format_event_time(el["start_time"], el['end_time'])
+            destroyed_events.append(f"• \\[{event_time}] {el['title']}")
+
+        # Объединяем их в единый текстовый блок
+        events_preview = "\n".join(destroyed_events) + "\n\n"
+
+        # 3. Задаем динамический текст склонений для нашего универсального confirm_to_delete
+        delete_text = (
+            "⚠️ *АБСОЛЮТНО ВСЕ* мероприятия на этот день?",
+            "**все существующие заметки** на эту дату! Восстановление будет невозможно."
+        )
+
+        # 4. Вызываем твой гениальный универсальный confirm_to_delete
+        state = await confirm_to_delete(query, events_preview, selected_date, delete_text)
+        return state
+
+    # если нажата inline-кнопка с номером события
     else:
         # 1. Получаем индекс кликнутой цифровой кнопки (0, 1, 2...)
         id_event = int(query.data.split(':')[1])
@@ -81,10 +109,8 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         # 5. Формируем динамический текст: какое именно событие удаляем
         delete_text = f"событие № {id_event + 1}?", 'заметку.'
 
-        # 6. Красиво форматируем время для вывода на экран подтверждения через strftime
-        # st_time = event_rec["start_time"].strftime("%H:%M")
-        # end_time = event_rec["end_time"].strftime("%H:%M")
-        event_time = format_event_time(event_rec["start_time"], event_rec["end_time"])
+        event_time = format_event_time(
+            event_rec["start_time"], event_rec["end_time"])
         event = f"📌 *Событие*: [{event_time}] {event_rec['title']}\n"
 
         state = await confirm_to_delete(query, event, selected_date, delete_text)

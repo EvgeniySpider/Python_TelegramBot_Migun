@@ -37,7 +37,7 @@ async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAU
 async def prepare_after_delete(update, context, query):
     # Подчищаем за собой оперативку
     context.user_data.pop('delete_event_id', None)
-    context.user_data.pop('current_day_events', None)
+    context.user_data.pop('event_text_record', None)
     context.user_data.pop('events_text', None)
     # Оповещаем пользователя и сразу вызываем календарь, чтобы обновить интерфейс
     # Для этого вызываем твой готовый calendar_command
@@ -58,14 +58,14 @@ async def del_event_on_info(context, column_name, value) -> None:
 
 async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    current_day_events = context.user_data.get('current_day_events', [])
+    event_text_record = context.user_data.get('event_text_record', [])
 
     if query.data == 'del_num:cancel':
         state = await handle_delete_confirmation(update, context)
         return state
     elif query.data == 'del_num:everything':
         selected_date = context.user_data.get('selected_date')
-        current_day_events = context.user_data.get('current_day_events', [])
+        event_text_record = context.user_data.get('event_text_record', [])
 
         # 1. Готовим таргеты для SQL-запроса (удаляем пачкой по дате)
         # Передаем саму дату
@@ -74,7 +74,7 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['column_name'] = 'event_date'
 
         destroyed_events = []
-        for el in current_day_events:
+        for el in event_text_record:
             event_time = format_event_time(el["start_time"], el['end_time'])
             destroyed_events.append(f"• \\[{event_time}] {el['title']}")
 
@@ -97,7 +97,7 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         id_event = int(query.data.split(':')[1])
 
         # 2. Забираем конкретный Record-объект из нашего списка в ОЗУ по этому индексу
-        event_rec = current_day_events[id_event]
+        event_rec = event_text_record[id_event]
 
         # 3. Сохраняем точечные данные для удаления в контекст (для будущей корутины подтверждения)
         context.user_data['delete_event_id'] = event_rec['id']

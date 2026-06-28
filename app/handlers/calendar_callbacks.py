@@ -30,7 +30,7 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
         events = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
-        context.user_data['current_day_events'] = events
+        context.user_data['event_text_record'] = events
         if not events:
             events_text = "На этот день ничего не запланировано.\n"
             context.user_data['events_text'] = events_text
@@ -44,7 +44,7 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
                     event_time = format_event_time(
                         el["start_time"], el['end_time'])
                     raw_events.append(
-                        f"• \\[{event_time}] {el['title']}")
+                        f"• {event_time} {el['title']}")
 
             # Собираем финальный текст в один проход
             events_text = "Запланированные дела:\n" + \

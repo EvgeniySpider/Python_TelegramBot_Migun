@@ -8,14 +8,14 @@ from app.handlers.states import (
     CONFIRMING_DELETE,
     TYPING_EVENT_NUMBER_TO_DELETE)
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
-from app.core.calendar.utils import format_event_time
+from app.core.calendar.utils import format_event_time, build_events_list_text
 
 
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
 
     selected_date = context.user_data.get('selected_date')
-    current_day_events = context.user_data.get('current_day_events', [])
+    event_text_record = context.user_data.get('event_text_record', [])
     events_text = context.user_data.get('events_text', None)
 
     # Проверяем, какая именно кнопка была нажата
@@ -42,16 +42,16 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         pass
 
     elif query.data == "action_delete":
-        event_count = len(current_day_events)
+        event_count = len(event_text_record)
         # СЦЕНАРИЙ 1: Событие ровно одно и это "Весь день"
         # Проверяем либо через структуру данных, либо через твою идею с текстом: "(весь день)" in events_text
         if event_count == 1:
-            event_rec = current_day_events[0]
+            event_rec = event_text_record[0]
 
             # Сохраняем ID этого единственного события в контекст для будущего SQL-запроса DELETE
             context.user_data['delete_event_id'] = event_rec['id']
             context.user_data['column_name'] = 'id'
-            first_sent = 'мероприятие на весь день?' if current_day_events[
+            first_sent = 'мероприятие на весь день?' if event_text_record[
                 0]['event_type'] == 'all_day' else 'мероприятие?'
             delete_text = first_sent, 'заметку.'
             event = f'📌 *Событие*: {event_rec['title']}\n'
@@ -64,11 +64,11 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             # 1. Единый цикл сборки текстового представления событий
             numbered_events = []
-            for i, rec in enumerate(current_day_events):
+            for i, rec in enumerate(event_text_record):
                 event_time = format_event_time(
                     rec['start_time'], rec['end_time'])
                 # Используем универсальный формат отображения списка
-                st = f'[ {i+1} ]    [{event_time}] {rec["title"]}'
+                st = f'[ {i+1} ]  • {event_time} {rec["title"]}'
                 numbered_events.append(st)
 
             events_list_text = '\n'.join(numbered_events)
@@ -136,8 +136,8 @@ async def confirm_to_delete(source, event, selected_date, delete_text):
 
 
 async def handle_delete_event_by_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    current_day_events = context.user_data.get('current_day_events', [])
-    event_count = len(current_day_events)
+    event_text_record = context.user_data.get('event_text_record', [])
+    event_count = len(event_text_record)
     user_text = update.message.text.strip()
 
     # 1. Валидация: проверяем, что введена строка из цифр
@@ -160,7 +160,7 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
 
     # --- Если валидация успешна, логика полностью повторяет клик по inline-кнопке ---
     id_event = chosen_number - 1  # Переводим в индекс массива (0, 1, 2...)
-    event_rec = current_day_events[id_event]
+    event_rec = event_text_record[id_event]
 
     # Сохраняем таргеты для удаления в ОЗУ
     context.user_data['delete_event_id'] = event_rec['id']

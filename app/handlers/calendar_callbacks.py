@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_keyboard import generate_time_options_keyboard, generate_options_keyboard
 from app.handlers.states import CHOOSING_TIME, CHOOSING_ACTION
+from app.core.calendar.utils import format_event_time
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -40,11 +41,10 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
                 if el['start_time'] is None:
                     raw_events.append(f"• {el['title']} (весь день)")
                 else:
-                    # Магия :02d жестко фиксирует два знака для часов и минут
-                    st_time = f'{el["start_time"].hour:02d}:{el["start_time"].minute:02d}'
-                    end_time = f'{el["end_time"].hour:02d}:{el["end_time"].minute:02d}'
+                    event_time = format_event_time(
+                        el["start_time"], el['end_time'])
                     raw_events.append(
-                        f"• [{st_time} - {end_time}] {el['title']}")
+                        f"• \\[{event_time}] {el['title']}")
 
             # Собираем финальный текст в один проход
             events_text = "Запланированные дела:\n" + \

@@ -8,7 +8,7 @@ from app.handlers.states import (
     CONFIRMING_DELETE,
     TYPING_EVENT_NUMBER_TO_DELETE)
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
-
+from app.core.calendar.utils import format_event_time
 
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -91,9 +91,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                     reply_markup=None,
                     parse_mode="Markdown"
                 )
-                # Тут будет возврат твоего нового стейта для ожидания сообщения
-                # return TYPING_EVENT_NUMBER_TO_DELETE
-                pass
+                return TYPING_EVENT_NUMBER_TO_DELETE
 
 
 # --- ТОЧЕЧНЫЙ ХЭНДЛЕР ВОЗВРАТА К КАЛЕНДАРЮ ---
@@ -169,10 +167,9 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     selected_date = context.user_data.get('selected_date')
     delete_text = f"событие № {chosen_number}?", "эту заметку."
 
-    # Собираем время через strftime
-    st_time = event_rec["start_time"].strftime("%H:%M")
-    end_time = event_rec["end_time"].strftime("%H:%M")
-    event = f"📌 *Событие*: [{st_time} - {end_time}] {event_rec['title']}\n"
-# async def confirm_to_delete(query, event, selected_date, delete_text):
 
-    state = await confirm_to_delete(query)
+    event_time = format_event_time(event_rec["start_time"], event_rec["end_time"])
+    event = f"📌 *Событие*: [{event_time}] {event_rec['title']}\n"
+
+    state = await confirm_to_delete(update, event, selected_date, delete_text)
+    return state

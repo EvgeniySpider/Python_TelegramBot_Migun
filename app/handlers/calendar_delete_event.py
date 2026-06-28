@@ -5,7 +5,7 @@ from app.handlers.commands import calendar_command
 from app.handlers.states import CHOOSING_ACTION
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_act_with_options import confirm_to_delete
-
+from app.core.calendar.utils import format_event_time
 
 async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -82,9 +82,10 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         delete_text = f"событие № {id_event + 1}?", 'заметку.'
 
         # 6. Красиво форматируем время для вывода на экран подтверждения через strftime
-        st_time = event_rec["start_time"].strftime("%H:%M")
-        end_time = event_rec["end_time"].strftime("%H:%M")
-        event = f"📌 *Событие*: [{st_time} - {end_time}] {event_rec['title']}\n"
+        # st_time = event_rec["start_time"].strftime("%H:%M")
+        # end_time = event_rec["end_time"].strftime("%H:%M")
+        event_time = format_event_time(event_rec["start_time"], event_rec["end_time"])
+        event = f"📌 *Событие*: [{event_time}] {event_rec['title']}\n"
 
         state = await confirm_to_delete(query, event, selected_date, delete_text)
 

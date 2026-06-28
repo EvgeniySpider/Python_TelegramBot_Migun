@@ -12,6 +12,7 @@ from app.handlers.states import (
 from app.handlers.calendar_keyboard import generate_yes_no_keyboard
 from app.core.calendar.repositories import CalendarRepository
 import re
+from app.core.calendar.utils import format_event_time
 
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -279,9 +280,7 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if event_type == 'all_day':
         duration_text = 'Весь день'
     else:
-        st_time = f'{start_time.hour:02d}:{start_time.minute:02d}'
-        end_time = f'{end_time.hour:02d}:{end_time.minute:02d}'
-        duration_text = f'{st_time} - {end_time}'
+        duration_text = format_event_time(start_time, end_time)
     # Формируем финальный красивый рапорт пользователю
     report_text = (
         f"🎉 Мероприятие успешно добавлено!\n\n"

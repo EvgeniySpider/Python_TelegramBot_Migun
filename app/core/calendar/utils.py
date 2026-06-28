@@ -11,7 +11,7 @@ def format_event_time(start_time: time, end_time: time) -> str:
     return f"{st} - {end}"
 
 
-def build_events_list_text(events: list, numbered: bool = False) -> str:
+def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = False) -> str:
     """
     Генерирует текстовый список событий.
     Безопасно обрабатывает события на весь день (у которых start_time равен None).

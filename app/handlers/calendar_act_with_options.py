@@ -145,7 +145,7 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     delete_text = f"событие № {chosen_number}?", "эту заметку."
 
     event_time = format_event_time(event_rec["start_time"], event_rec["end_time"])
-    event = f"📌 *Событие*: \\[{event_time}\\] {event_rec['title']}\n"
+    event = f"📌 *Событие*: \\[{event_time}] {event_rec['title']}\n"
 
     state = await confirm_to_delete(update, event, selected_date, delete_text)
     return state

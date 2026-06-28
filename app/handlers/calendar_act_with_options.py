@@ -2,7 +2,11 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.calendar_callbacks import handle_time_selection_option
 from app.handlers.commands import calendar_command
-from app.handlers.states import CHOOSING_ACTION, CHOOSING_EVENT_TO_DELETE, CONFIRMING_DELETE
+from app.handlers.states import (
+    CHOOSING_ACTION,
+    CHOOSING_EVENT_TO_DELETE,
+    CONFIRMING_DELETE,
+    TYPING_EVENT_NUMBER_TO_DELETE)
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
 
 
@@ -46,9 +50,10 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             # Сохраняем ID этого единственного события в контекст для будущего SQL-запроса DELETE
             context.user_data['delete_event_id'] = event_rec['id']
             context.user_data['column_name'] = 'id'
-            first_sent = 'мероприятие на весь день?' if current_day_events[0]['event_type'] == 'all_day' else 'мероприятие?'
+            first_sent = 'мероприятие на весь день?' if current_day_events[
+                0]['event_type'] == 'all_day' else 'мероприятие?'
             delete_text = first_sent, 'заметку.'
-            event = f'📌 *Событие*: {event_rec['title']}\n' 
+            event = f'📌 *Событие*: {event_rec['title']}\n'
 
             # async def confirm_to_delete(query, event, selected_date, delete_text):
             state = await confirm_to_delete(query, event, selected_date, delete_text)
@@ -56,23 +61,38 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
         # СЦЕНАРИИ 2 и 3: Событий несколько
         else:
+            # 1. Единый цикл сборки текстового представления событий
+            numbered_events = []
+            for i, rec in enumerate(current_day_events):
+                st_time = f'{rec["start_time"].hour:02d}:{rec["start_time"].minute:02d}'
+                end_time = f'{rec["end_time"].hour:02d}:{rec["end_time"].minute:02d}'
+
+                # Используем универсальный формат отображения списка
+                st = f'[ {i+1} ]    {st_time} - {end_time} {rec["title"]}'
+                numbered_events.append(st)
+
+            events_list_text = '\n'.join(numbered_events)
+
+            # 2. Развилка логики в зависимости от количества (лимит 10 кнопок)
             if event_count < 11:
-                numbered_events = []
-                for i, rec in enumerate(current_day_events):
-                    st_time = f'{rec["start_time"].hour:02d}:{rec["start_time"].minute:02d}'
-                    end_time = f'{rec["end_time"].hour:02d}:{rec["end_time"].minute:02d}'
-                    st = f'[ {i+1} ]    {st_time} - {end_time} {rec['title']}'
-
-                    numbered_events.append(st)
-
+                # Сценарий 2: Кнопок немного — выводим inline-клавиатуру
                 await query.edit_message_text(
-                    text="Нажмите на номер события который хотите удалить\n\n"
-                    f'{'\n'.join(numbered_events)}',
+                    text="Нажмите на номер события, которое хотите удалить:\n\n"
+                         f"{events_list_text}",
                     reply_markup=generate_numbered_events_keyboard(event_count)
                 )
-
                 return CHOOSING_EVENT_TO_DELETE
             else:
+                # Сценарий 3: Событий слишком много (>10) — убираем кнопки, ждем текст
+                await query.edit_message_text(
+                    text="⚠️ Событий слишком много для отображения кнопок.\n"
+                         "**Пришлите в ответном сообщении номер (цифру)** события, которое хотите удалить:\n\n"
+                         f"{events_list_text}",
+                    reply_markup=None,
+                    parse_mode="Markdown"
+                )
+                # Тут будет возврат твоего нового стейта для ожидания сообщения
+                # return TYPING_EVENT_NUMBER_TO_DELETE
                 pass
 
 
@@ -84,13 +104,75 @@ async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DE
     return ConversationHandler.END
 
 
-async def confirm_to_delete(query, event, selected_date, delete_text):
-    await query.edit_message_text(
-        text=f"❓ *Вы уверены, что хотите удалить {delete_text[0]}*\n\n"
+async def confirm_to_delete(source, event, selected_date, delete_text):
+    """
+    Универсальная функция отправки окна подтверждения.
+    source: может быть как CallbackQuery (при клике), так и Update (при вводе текста)
+    """
+    # 1. Формируем единый текст
+    text_to_send = (
+        f"❓ *Вы уверены, что хотите удалить {delete_text[0]}*\n\n"
         f"{event}"
         f"📅 *Дата*: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n\n"
-        f"⚠️ Это действие полностью сотрёт {delete_text[1]}",
-        reply_markup=generate_confirm_keyboard(),
-        parse_mode="Markdown"
+        f"⚠️ Это действие полностью сотрёт {delete_text[1]}"
     )
+
+    # 2. Общие параметры для отправки
+    kwargs = {
+        "text": text_to_send,
+        "reply_markup": generate_confirm_keyboard(),
+        "parse_mode": "Markdown"
+    }
+
+    # 3. Элегантная развилка: определяем, как именно отправлять
+    # Если это CallbackQuery (есть атрибут edit_message_text)
+    if hasattr(source, "edit_message_text"):
+        await source.edit_message_text(**kwargs)
+    else:
+        # Если это Update от текстового сообщения
+        await source.message.reply_text(**kwargs)
+
     return CONFIRMING_DELETE
+
+
+async def handle_delete_event_by_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    current_day_events = context.user_data.get('current_day_events', [])
+    event_count = len(current_day_events)
+    user_text = update.message.text.strip()
+
+    # 1. Валидация: проверяем, что введена строка из цифр
+    if not user_text.isdigit():
+        await update.message.reply_text(
+            f"❌ Ошибка: введите только **число** (цифру).\n"
+            f"Попробуйте еще раз (от 1 до {event_count}):",
+            parse_mode="Markdown"
+        )
+        return TYPING_EVENT_NUMBER_TO_DELETE  # Удерживаем в этом же стейте
+
+    # 2. Валидация: переводим в int и проверяем границы диапазона
+    chosen_number = int(user_text)
+    if chosen_number < 1 or chosen_number > event_count:
+        await update.message.reply_text(
+            f"❌ Ошибка: события под номером {chosen_number} не существует.\n"
+            f"Введите число в диапазоне от 1 до {event_count}:"
+        )
+        return TYPING_EVENT_NUMBER_TO_DELETE  # Удерживаем в этом же стейте
+
+    # --- Если валидация успешна, логика полностью повторяет клик по inline-кнопке ---
+    id_event = chosen_number - 1  # Переводим в индекс массива (0, 1, 2...)
+    event_rec = current_day_events[id_event]
+
+    # Сохраняем таргеты для удаления в ОЗУ
+    context.user_data['delete_event_id'] = event_rec['id']
+    context.user_data['column_name'] = 'id'
+
+    selected_date = context.user_data.get('selected_date')
+    delete_text = f"событие № {chosen_number}?", "эту заметку."
+
+    # Собираем время через strftime
+    st_time = event_rec["start_time"].strftime("%H:%M")
+    end_time = event_rec["end_time"].strftime("%H:%M")
+    event = f"📌 *Событие*: [{st_time} - {end_time}] {event_rec['title']}\n"
+# async def confirm_to_delete(query, event, selected_date, delete_text):
+
+    state = await confirm_to_delete(query)

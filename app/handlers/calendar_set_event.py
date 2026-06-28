@@ -276,12 +276,18 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             user_id, event_type, event_title, selected_date, start_time, end_time, description
         )
 
+    if event_type == 'all_day':
+        duration_text = 'Весь день'
+    else:
+        st_time = f'{start_time.hour:02d}:{start_time.minute:02d}'
+        end_time = f'{end_time.hour:02d}:{end_time.minute:02d}'
+        duration_text = f'{st_time} - {end_time}'
     # Формируем финальный красивый рапорт пользователю
     report_text = (
         f"🎉 Мероприятие успешно добавлено!\n\n"
         f"📅 Дата: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n"
         f"📌 Событие: {event_title}\n"
-        f"⏰ Время: {'Весь день' if event_type == 'all_day' else f'{start_time} - {end_time}'}\n"
+        f"⏰ Время: {duration_text}"
     )
 
     if description:

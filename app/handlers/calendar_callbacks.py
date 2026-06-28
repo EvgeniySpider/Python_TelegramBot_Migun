@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_keyboard import generate_time_options_keyboard, generate_options_keyboard
 from app.handlers.states import CHOOSING_TIME, CHOOSING_ACTION
-from app.core.calendar.utils import format_event_time
+from app.core.calendar.utils import build_events_list_text
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -31,25 +31,15 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     async with context.application.database.connection() as conn:
         events = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
         context.user_data['event_text_record'] = events
+
         if not events:
             events_text = "На этот день ничего не запланировано.\n"
-            context.user_data['events_text'] = events_text
             return await handle_time_selection_option((query, day, month, year), events_text)
         else:
-            raw_events = []
-            for el in events:
-                if el['start_time'] is None:
-                    raw_events.append(f"• {el['title']} (весь день)")
-                else:
-                    event_time = format_event_time(
-                        el["start_time"], el['end_time'])
-                    raw_events.append(
-                        f"• {event_time} {el['title']}")
+            # Магия: генерируем красивый ненумерованный список дел одной строчкой
+            events_list = build_events_list_text(events, numbered=False)
+            events_text = f"{events_list}"
 
-            # Собираем финальный текст в один проход
-            events_text = "Запланированные дела:\n" + \
-                "\n".join(raw_events) + '\n\n'
-            context.user_data['events_text'] = events_text
             return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 
 

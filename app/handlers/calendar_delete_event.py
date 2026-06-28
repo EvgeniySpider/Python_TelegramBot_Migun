@@ -1,20 +1,19 @@
 from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_day
 from telegram import Update
-from telegram.ext import ContextTypes,  ConversationHandler
+from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.commands import calendar_command
 from app.handlers.states import CHOOSING_ACTION
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_act_with_options import confirm_to_delete
-from app.core.calendar.utils import format_event_time
+from app.core.calendar.utils import format_event_time, build_events_list_text
 
 
 async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
+
     # Если пользователь нажал "Да, удалить"
     if query.data == "confirm_delete_yes":
-
         event_id = context.user_data.get('delete_event_id')
-        selected_date = context.user_data.get('selected_date')
         column_name = context.user_data.get('column_name', 'id')
 
         await del_event_on_info(context, column_name, event_id)
@@ -23,13 +22,14 @@ async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAU
 
     # Если пользователь нажал "Нет, назад"
     else:
-        # Чистим только ID удаления, массив событий оставляем
         context.user_data.pop('delete_event_id', None)
-        events_text = context.user_data.get('events_text', "")
+        event_text_record = context.user_data.get('event_text_record', [])
         selected_date = context.user_data.get('selected_date')
-        # Возвращаем меню из 3-х кнопок ("Добавить", "Изменить", "Удcaалить")
-        args = (query, selected_date.day,
-                selected_date.month, selected_date.year)
+        
+        # Получаем готовую строку со всеми заголовками из утилиты
+        events_text = build_events_list_text(event_text_record, numbered=False)
+        
+        args = (query, selected_date.day, selected_date.month, selected_date.year)
         await handle_options_with_exist_notes_in_day(events_text, args)
         return CHOOSING_ACTION
 
@@ -38,9 +38,7 @@ async def prepare_after_delete(update, context, query):
     # Подчищаем за собой оперативку
     context.user_data.pop('delete_event_id', None)
     context.user_data.pop('event_text_record', None)
-    context.user_data.pop('events_text', None)
-    # Оповещаем пользователя и сразу вызываем календарь, чтобы обновить интерфейс
-    # Для этого вызываем твой готовый calendar_command
+
     await query.edit_message_text(text="🗑️ Мероприятие успешно удалено!")
     # Вызываем календарь заново, чтобы юзер видел актуальную сетку месяца
     await calendar_command(update, context)
@@ -63,23 +61,17 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
     if query.data == 'del_num:cancel':
         state = await handle_delete_confirmation(update, context)
         return state
+
     elif query.data == 'del_num:everything':
         selected_date = context.user_data.get('selected_date')
-        event_text_record = context.user_data.get('event_text_record', [])
 
         # 1. Готовим таргеты для SQL-запроса (удаляем пачкой по дате)
-        # Передаем саму дату
         context.user_data['delete_event_id'] = selected_date
-        # Таргетим колонку даты в БД
         context.user_data['column_name'] = 'event_date'
 
-        destroyed_events = []
-        for el in event_text_record:
-            event_time = format_event_time(el["start_time"], el['end_time'])
-            destroyed_events.append(f"• \\[{event_time}] {el['title']}")
-
-        # Объединяем их в единый текстовый блок
-        events_preview = "\n".join(destroyed_events) + "\n\n"
+        # Магия: генерируем обычный красивый список для превью одной строчкой!
+        events_preview = build_events_list_text(
+            event_text_record, numbered=False) + "\n\n"
 
         # 3. Задаем динамический текст склонений для нашего универсального confirm_to_delete
         delete_text = (
@@ -87,33 +79,24 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
             "**все существующие заметки** на эту дату! Восстановление будет невозможно."
         )
 
-        # 4. Вызываем твой гениальный универсальный confirm_to_delete
         state = await confirm_to_delete(query, events_preview, selected_date, delete_text)
         return state
 
-    # если нажата inline-кнопка с номером события
+    # Если нажата inline-кнопка с номером события
     else:
-        # 1. Получаем индекс кликнутой цифровой кнопки (0, 1, 2...)
         id_event = int(query.data.split(':')[1])
-
-        # 2. Забираем конкретный Record-объект из нашего списка в ОЗУ по этому индексу
         event_rec = event_text_record[id_event]
 
-        # 3. Сохраняем точечные данные для удаления в контекст (для будущей корутины подтверждения)
         context.user_data['delete_event_id'] = event_rec['id']
         context.user_data['column_name'] = 'id'
 
-        # 4. Забираем дату из контекста
         selected_date = context.user_data.get('selected_date')
-
-        # 5. Формируем динамический текст: какое именно событие удаляем
         delete_text = f"событие № {id_event + 1}?", 'заметку.'
 
         event_time = format_event_time(
             event_rec["start_time"], event_rec["end_time"])
-        event = f"📌 *Событие*: [{event_time}] {event_rec['title']}\n"
+        # Корректируем экранирование под твой успешный тест (2 знака)
+        event = f"📌 *Событие*: \\[{event_time}\\] {event_rec['title']}\n"
 
         state = await confirm_to_delete(query, event, selected_date, delete_text)
-
-        # 8. Возвращаем стейт CONFIRMING_DELETE, который прилетел из корутины
         return state

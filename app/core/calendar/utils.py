@@ -11,30 +11,27 @@ def format_event_time(start_time: time, end_time: time) -> str:
     return f"{st} - {end}"
 
 
-def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = False) -> str:
+def build_events_list_text(events: list, numbered: bool = False) -> str:
     """
     Генерирует текстовый список событий.
-    Если numbered=True, то вместо '• [Время]' выведет '[ 1 ]   Время'
+    Безопасно обрабатывает события на весь день (у которых start_time равен None).
     """
-    from app.core.calendar.utils import format_event_time  # локальный импорт во избежание циклов
-
     raw_lines = []
     for i, el in enumerate(events):
-        # 1. Определяем время
-        if el['start_time'] is None:
-            time_str = "(весь день)"
+        # 1. Проверяем, является ли событие полнодневным
+        if el['start_time'] is None or el.get('event_type') == 'all_day':
+            time_str = "Весь день"
         else:
-            time_str = f"{format_event_time(el['start_time'], el['end_time'])}"
-
-        # 2. Формируем префикс: либо маркер, либо индекс для удаления
+            time_str = format_event_time(el['start_time'], el['end_time'])
+            
+        # 2. Формируем строку в зависимости от режима
         if numbered:
-            prefix = f"[ {i+1} ]    "
-            time_clean = time_str.replace("\\[", "").replace("\\]", "")
-            line = f"{prefix}{time_clean} {el['title']}"
+            # Формат для удаления: [ 1 ]  • Весь день Тестовая задача №1
+            line = f"\\[ {i+1} ]  • {time_str} {el['title']}"
         else:
-            prefix = "• "
-            line = f"{prefix}{time_str} {el['title']}"
+            # Обычный формат главного меню: • Весь день Тестовая задача №1
+            line = f"• {time_str} {el['title']}"
+            
+        raw_lines.append(line)
 
-        raw_lines.append(line)  # Вот теперь строго по ГОСТу
-
-    return "\n".join(raw_lines)
+    return "Запланированные дела: \n" + "\n".join(raw_lines) + "\n\n"

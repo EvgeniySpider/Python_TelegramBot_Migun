@@ -12,7 +12,7 @@ from app.handlers.states import (
 from app.handlers.calendar_keyboard import generate_yes_no_keyboard
 from app.core.calendar.repositories import CalendarRepository
 import re
-from app.core.calendar.utils import format_event_time
+from app.core.calendar.utils import format_event_time, build_events_list_text
 
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -20,8 +20,7 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     parts = query.data.split(":")
     data = context.user_data.get('selected_date')
-
-    events_text = context.user_data['events_text']
+    event_text_record = context.user_data.get('event_text_record', [])
 
     if parts[1] == "all_day":
         context.user_data['event_type'] = 'all_day'
@@ -45,6 +44,8 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     elif parts[1] == "exact":
         context.user_data['event_type'] = 'exact'
+        # Магия: генерируем актуальный список на лету из первоисточника
+        events_text = build_events_list_text(event_text_record, numbered=False)
 
         await query.edit_message_text(
             text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n\n"
@@ -57,6 +58,9 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     elif parts[1] == "interval":
         context.user_data['event_type'] = 'interval'
+        # Магия: генерируем актуальный список на лету из первоисточника
+        events_text = build_events_list_text(event_text_record, numbered=False)
+        
         await query.edit_message_text(
             text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n\n"
             f"{events_text}"
@@ -82,11 +86,9 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
         return WAITING_FOR_TIME_INPUT_INTERVAL
 
     raw_start, raw_end = match_object[1], match_object[2]
-    # Вспомогательная функция для превращения "9" в "09:00", а "14:30" в "14:30"
 
     def normalize_time_str(t_str: str) -> str:
         if ":" not in t_str:
-            # Перевод в int уберёт проблемы с "09" -> "09:00"
             return f"{int(t_str):02d}:00"
         else:
             hours, minutes = t_str.split(":")
@@ -99,7 +101,6 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
         start_time = datetime.strptime(start_clean, "%H:%M").time()
         end_time = datetime.strptime(end_clean, "%H:%M").time()
     except ValueError:
-        # Сработает, если юзер ввёл несуществующее время, например "25:00-29:00" или "12:65"
         await update.message.reply_text(
             text="❌ Введено некорректное время суток (максимум 23:59)!\n"
             "Попробуйте ещё раз:"
@@ -141,11 +142,9 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
 
 
 async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ловит строку времени, проверяет её формат, рассчитывает интервал +30 минут."""
     raw_time = update.message.text.strip().replace(' ', '')
     selected_date = context.user_data['selected_date']
 
-    # 1. Проверяем структуру регуляркой (допускаем "9", "09:30", "14")
     time_pattern = re.compile(r'^(\d{1,2})(?::(\d{2}))?$')
     match_object = time_pattern.fullmatch(raw_time)
 
@@ -158,24 +157,20 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
 
     hours, minutes = match_object[1], match_object[2]
 
-    # Нормализуем строку времени (приводим к строгому ЧЧ:ММ)
     if minutes is None:
         clean_time = f"{int(hours):02d}:00"
     else:
         clean_time = f"{int(hours):02d}:{minutes}"
 
-    # 2. Проверяем логические границы времени суток
     try:
         start_time = datetime.strptime(clean_time, "%H:%M").time()
     except ValueError:
-        # Сработает конкретно на "25:00", "14:65" и т.д.
         await update.message.reply_text(
             text="❌ Введено некорректное время суток (максимум 23:59)!\n"
                  "Попробуйте ещё раз:"
         )
         return WAITING_FOR_TIME_INPUT_EXACT
 
-    # 3. Логика интервала по умолчанию (+30 минут)
     dt_start = datetime.combine(selected_date, start_time)
     dt_end = dt_start + timedelta(minutes=30)
 
@@ -199,7 +194,6 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
             )
             return WAITING_FOR_TIME_INPUT_EXACT
 
-    # 4. Сохраняем расчеты в оперативку (user_data)
     context.user_data['start_time'] = start_time
     context.user_data['end_time'] = end_time
 
@@ -213,7 +207,6 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ловит название, сохраняет в контекст и предлагает инлайн-кнопки описания."""
     event_title = update.message.text
     context.user_data['event_title'] = event_title
 
@@ -226,20 +219,15 @@ async def handle_title_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обрабатывает клик по кнопкам [Да] или [Нет]."""
     query = update.callback_query
     await query.answer()
 
     if query.data == "desc_no":
-        # Юзер отказался от описания. Описание = None.
         context.user_data['description'] = None
-
-        # Переходим к финальной точке — сохранению в базу
         await _save_event_to_db(update, context)
         return ConversationHandler.END
 
     if query.data == "desc_yes":
-        # Юзер хочет ввести описание. Переводим стейт и просим текст.
         await query.edit_message_text(
             text="📝 Введите текст описания (заметки) для мероприятия:"
         )
@@ -247,19 +235,14 @@ async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def handle_description_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ловит текст описания, сохраняет его и вызывает запись в базу."""
     context.user_data['description'] = update.message.text
-
     await _save_event_to_db(update, context)
     return ConversationHandler.END
 
 
-# ВНУТРЕННЯЯ ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ (Единая для всех веток)
 async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Берет все накопленные данные из контекста и делает один чистый INSERT."""
     user_id = update.effective_user.id
 
-    # Достаем всё, что накопили на прошлых шагах
     selected_date = context.user_data.get('selected_date')
     event_type = context.user_data.get('event_type')
     event_title = context.user_data.get('event_title')
@@ -267,7 +250,6 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     end_time = context.user_data.get('end_time')
     description = context.user_data.get('description')
 
-    # Атомарный INSERT в базу
     async with context.application.database.connection() as conn:
         await conn.execute(
             """
@@ -281,7 +263,7 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         duration_text = 'Весь день'
     else:
         duration_text = format_event_time(start_time, end_time)
-    # Формируем финальный красивый рапорт пользователю
+
     report_text = (
         f"🎉 Мероприятие успешно добавлено!\n\n"
         f"📅 Дата: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n"
@@ -290,15 +272,13 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
     if description:
-        report_text += f"📝 Описание: {description}"
+        report_text += f"\n📝 Описание: {description}"
 
-    # Отправляем рапорт. Физика отправки зависит от того, как завершился шаг:
-    # Если юзер нажал "Нет" — отправляем через query.edit_message_text (так как это был CallbackQuery)
-    # Если юзер ввел текст — отправляем через обычный reply_text
     if update.callback_query:
         await update.callback_query.edit_message_text(text=report_text)
     else:
         await update.message.reply_text(text=report_text)
 
-    # Очищаем ОЗУ сервера для этого юзера
-    context.user_data.clear()
+    # Перфекционизм: точечно чистим только мусор от текущей сессии создания
+    for key in ['event_type', 'event_title', 'start_time', 'end_time', 'description', 'event_text_record']:
+        context.user_data.pop(key, None)

@@ -39,14 +39,15 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         event_count = len(current_day_events)
         # СЦЕНАРИЙ 1: Событие ровно одно и это "Весь день"
         # Проверяем либо через структуру данных, либо через твою идею с текстом: "(весь день)" in events_text
-        if event_count == 1 and current_day_events[0]['event_type'] == 'all_day':
+        if event_count == 1:
             event_rec = current_day_events[0]
 
             # Сохраняем ID этого единственного события в контекст для будущего SQL-запроса DELETE
             context.user_data['delete_event_id'] = event_rec['id']
             context.user_data['column_name'] = 'id'
-            delete_text = 'мероприятие на весь день?'
-            event = f'📌 *Событие*: {event_rec['title']}\n'
+            first_sent = 'мероприятие на весь день?' if current_day_events[0]['event_type'] == 'all_day' else 'мероприятие?'
+            delete_text = first_sent, 'заметку.'
+            event = f'📌 *Событие*: {event_rec['title']}\n' 
 
             # async def confirm_to_delete(query, event, selected_date, delete_text):
             state = await confirm_to_delete(query, event, selected_date, delete_text)
@@ -84,10 +85,10 @@ async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DE
 
 async def confirm_to_delete(query, event, selected_date, delete_text):
     await query.edit_message_text(
-        text=f"❓ *Вы уверены, что хотите удалить {delete_text}*\n\n"
+        text=f"❓ *Вы уверены, что хотите удалить {delete_text[0]}*\n\n"
         f"{event}"
         f"📅 *Дата*: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n\n"
-        f"⚠️ Это действие полностью сотрет заметку.",
+        f"⚠️ Это действие полностью сотрёт {delete_text[1]}",
         reply_markup=generate_confirm_keyboard(),
         parse_mode="Markdown"
     )

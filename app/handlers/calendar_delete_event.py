@@ -79,7 +79,7 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         selected_date = context.user_data.get('selected_date')
 
         # 5. Формируем динамический текст: какое именно событие удаляем
-        delete_text = f"событие № {id_event + 1}?"
+        delete_text = f"событие № {id_event + 1}?", 'заметку.'
 
         # 6. Красиво форматируем время для вывода на экран подтверждения через strftime
         st_time = event_rec["start_time"].strftime("%H:%M")

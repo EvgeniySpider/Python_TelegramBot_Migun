@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.calendar_callbacks import handle_time_selection_option
 from app.handlers.commands import calendar_command
-from app.handlers.states import CHOOSING_TIME, CHOOSING_EVENT_TO_DELETE, CONFIRMING_DELETE
+from app.handlers.states import CHOOSING_ACTION, CHOOSING_EVENT_TO_DELETE, CONFIRMING_DELETE
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
 
 
@@ -23,13 +23,14 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 f'Выберите другую дату\n',
                 show_alert=False
             )
-            return CHOOSING_TIME
+            return CHOOSING_ACTION
 
         args = (query, selected_date.day,
                 selected_date.month, selected_date.year)
 
         # Напрямую вызываем корутину и возвращаем её стейт (CHOOSING_TIME)
         state = await handle_time_selection_option(args, events_text)
+        return state
 
     # Заглушки под остальные кнопки на будущее
     elif query.data == "action_edit":

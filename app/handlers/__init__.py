@@ -12,7 +12,7 @@ from app.handlers.calendar_act_with_options import (
     handle_back_to_calendar_click,
     handle_delete_event_by_number
 )
-from app.handlers.calendar_callbacks import handle_calendar_click
+from app.handlers.calendar_callbacks import handle_calendar_click, handle_calendar_nav_click
 from app.handlers.calendar_delete_event import handle_delete_confirmation, handle_delete_choice
 from app.handlers.calendar_set_event import (
     handle_set_event,
@@ -138,7 +138,7 @@ HANDLERS: tuple[BaseHandler, ...] = (
     # Навигационные кнопки календаря: переключение месяцев (<< Вперед / Назад >>)
     # Вынесено из ConversationHandler, так как навигация должна работать всегда, 
     # независимо от того, находится ли юзер внутри процесса создания/удаления заметок
-    CallbackQueryHandler(handle_calendar_click, pattern=r"^calendar_nav:"), 
+    CallbackQueryHandler(handle_calendar_nav_click, pattern=r"^calendar_nav:"), 
     # Подключение основной машины состояний
     calendar_conversation,
 )

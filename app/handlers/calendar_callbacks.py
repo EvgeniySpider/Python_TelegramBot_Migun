@@ -2,9 +2,14 @@ import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from app.core.calendar.repositories import CalendarRepository
-from app.handlers.calendar_keyboard import generate_time_options_keyboard, generate_options_keyboard
+from app.handlers.calendar_keyboard import (
+    generate_time_options_keyboard,
+    generate_options_keyboard,
+    generate_calendar_keyboard
+)
 from app.handlers.states import CHOOSING_TIME, CHOOSING_ACTION
 from app.core.calendar.utils import build_events_list_text
+from app.core.calendar.services import CalendarService
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -75,3 +80,46 @@ async def handle_time_selection_option(args: tuple, events_text: str = None) -> 
     )
 
     return CHOOSING_TIME
+
+
+async def handle_calendar_nav_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Глобальный обработчик переключения месяцев инлайн-календаря (кнопки « Пред и След »).
+    Пересчитывает сетку занятости для целевого месяца и обновляет интерфейс.
+    """
+    query = update.callback_query
+
+    # Защитная проверка от пустых апдейтов
+    if not query or not update.effective_user:
+        return
+
+    # 1. Гасим анимацию загрузки ("часики") на инлайн-кнопке
+    await query.answer()
+
+    # 2. Парсим целевую дату из callback_data (формат генерации: "calendar_nav:YYYY:MM")
+    parts = query.data.split(":")
+    target_year = int(parts[1])
+    target_month = int(parts[2])
+    user_id = update.effective_user.id
+
+    # 3. Запрашиваем из бизнес-логики свежий статус занятости дней для НОВОГО месяца
+    async with context.application.database.connection() as conn:
+        busy_days = await CalendarService.get_user_busy_days(
+            conn=conn,
+            user_id=user_id,
+            year=target_year,
+            month=target_month
+        )
+
+    # 4. Обновляем ОЗУ пользователя, чтобы валидация создания ивентов all_day работала корректно
+    context.user_data['month_busy_days'] = busy_days
+
+    # 5. Генерируем новую конфигурацию кнопок (матрицу дней) под целевой месяц
+    calendar_markup = generate_calendar_keyboard(
+        year=target_year,
+        month=target_month,
+        busy_days=busy_days
+    )
+
+    # 6. Обновляем исключительно инлайн-сетку кнопок под сообщением, избегая мерцания текста
+    await query.edit_message_reply_markup(reply_markup=calendar_markup)

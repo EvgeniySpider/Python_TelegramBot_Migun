@@ -9,6 +9,26 @@ from app.core.calendar.utils import format_event_time, build_events_list_text
 
 
 async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Главный диспетчер финального экрана подтверждения удаления (стейт CONFIRMING_DELETE).
+    Разводит логику в зависимости от итогового вердикта пользователя.
+
+    Варианты разветвления:
+    1. Клик по кнопке "Да, удалить" ('confirm_delete_yes'):
+       - Считывает параметры фильтрации из ОЗУ ('delete_event_id' и 'column_name').
+       - Передаёт их в корутину del_event_on_info для физического удаления строк из PostgreSQL.
+       - Вызывает деструктор prepare_after_delete для зачистки памяти и сброса стейта.
+
+    2. Клик по кнопке "Нет, назад" (любые другие callback-данные):
+       - Безопасно вычищает точечный таргет 'delete_event_id' из ОЗУ.
+       - Извлекает нетронутый первоисточник 'event_text_record' и генерирует из него
+         чистый список расписания дня через утилиту build_events_list_text.
+       - Возвращает пользователя в главное меню управления днем (handle_options_with_exist_notes_in_day).
+
+    Returns:
+        int: Либо ConversationHandler.END (при удалении), либо CHOOSING_ACTION (при возврате назад).
+    """
+
     query = update.callback_query
 
     # Если пользователь нажал "Да, удалить"
@@ -25,16 +45,31 @@ async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAU
         context.user_data.pop('delete_event_id', None)
         event_text_record = context.user_data.get('event_text_record', [])
         selected_date = context.user_data.get('selected_date')
-        
+
         # Получаем готовую строку со всеми заголовками из утилиты
         events_text = build_events_list_text(event_text_record, numbered=False)
-        
-        args = (query, selected_date.day, selected_date.month, selected_date.year)
+
+        args = (query, selected_date.day,
+                selected_date.month, selected_date.year)
         await handle_options_with_exist_notes_in_day(events_text, args)
         return CHOOSING_ACTION
 
 
-async def prepare_after_delete(update, context, query):
+async def prepare_after_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> int:
+    """
+    Выполняет посталгоритмическую очистку контекста пользователя после успешного удаления.
+
+    Механика работы:
+    1. Хирургически удаляет через .pop() временные ключи удаления ('delete_event_id')
+       и кэш записей дня ('event_text_record'), предотвращая утечку неактуальных данных в ОЗУ.
+    2. Изменяет текст текущего инлайн-сообщения, информируя об успешном стирании.
+    3. Вызывает команду генерации календаря (calendar_command) для отображения
+       обновленной сетки месяца с пересчитанными маркерами занятых дней.
+
+    Returns:
+        int: Состояние ConversationHandler.END для полной деактивации и завершения диалога.
+    """
+
     # Подчищаем за собой оперативку
     context.user_data.pop('delete_event_id', None)
     context.user_data.pop('event_text_record', None)
@@ -45,7 +80,18 @@ async def prepare_after_delete(update, context, query):
     return ConversationHandler.END
 
 
-async def del_event_on_info(context, column_name, value) -> None:
+async def del_event_on_info(context: ContextTypes.DEFAULT_TYPE, column_name: str, value) -> None:
+    """
+    Интерфейс низкоуровневого взаимодействия с СУБД для удаления записей.
+    Унифицирует обращения к репозиторию, изолируя контекст транзакции.
+
+    Args:
+        context (ContextTypes.DEFAULT_TYPE): Контекст телеграм-бота для доступа к пулу соединений базы данных.
+        column_name (str): Имя целевого столбца в таблице базы данных ('id' или 'event_date') 
+                           для фильтрации удаляемых строк.
+        value (Any): Значение фильтра (конкретный целочисленный ID записи или объект datetime.date).
+    """
+
     async with context.application.database.connection() as conn:
         await CalendarRepository.delete_events_by_filter(
             conn,
@@ -55,6 +101,31 @@ async def del_event_on_info(context, column_name, value) -> None:
 
 
 async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Маршрутизирует удаление событий по кликам на инлайн-кнопки.
+    Универсально обслуживает два стейта:
+    - CHOOSING_EVENT_TO_DELETE (когда кнопок от 2 до 10)
+    - TYPING_EVENT_NUMBER_TO_DELETE (перехватывает системные кнопки 'Назад' и 'Удалить все' при 10+ событиях)
+
+    Варианты разветвления логики:
+    1. Отмена операции ('del_num:cancel'):
+       Перенаправляет управление в handle_delete_confirmation для возврата в главное меню.
+       
+    2. Удаление всех событий ('del_num:everything'):
+       - Фиксирует в контексте групповые параметры: column_name = 'event_date' и delete_event_id = selected_date.
+       - Формирует строковое превью всех уничтожаемых записей на дату.
+       - Вызывает интерфейс подтверждения транзакции (confirm_to_delete).
+       
+    3. Выбор конкретной записи по номеру-кнопке ('del_num:X'):
+       - Извлекает индекс (0-9) из callback_data.
+       - Извлекает целевой объект Record из кэша context.user_data['event_text_record'].
+       - Задает точечные параметры удаления: column_name = 'id' и delete_event_id = Record['id'].
+       - Передаёт сформированный текст события в confirm_to_delete.
+
+    Returns:
+        int: Состояние CONFIRMING_DELETE для ожидания окончательного подтверждения.
+    """
+
     query = update.callback_query
     event_text_record = context.user_data.get('event_text_record', [])
 

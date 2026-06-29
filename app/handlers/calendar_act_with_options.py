@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.calendar_callbacks import handle_time_selection_option
 from app.handlers.commands import calendar_command
@@ -9,6 +9,7 @@ from app.handlers.states import (
     TYPING_EVENT_NUMBER_TO_DELETE)
 from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
 from app.core.calendar.utils import format_event_time, build_events_list_text
+from typing import Union
 
 
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -33,7 +34,8 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 selected_date.month, selected_date.year)
 
         # Генерируем обычный текст списка задач "на лету" без засорения context.user_data
-        current_events_text = build_events_list_text(event_text_record, numbered=False)
+        current_events_text = build_events_list_text(
+            event_text_record, numbered=False)
         state = await handle_time_selection_option(args, current_events_text)
         return state
 
@@ -42,15 +44,16 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
     elif query.data == "action_delete":
         event_count = len(event_text_record)
-        
+
         # СЦЕНАРИЙ 1: Событие ровно одно
         if event_count == 1:
             event_rec = event_text_record[0]
 
             context.user_data['delete_event_id'] = event_rec['id']
             context.user_data['column_name'] = 'id'
-            
-            first_sent = 'мероприятие на весь день?' if event_rec['event_type'] == 'all_day' else 'мероприятие?'
+
+            first_sent = 'мероприятие на весь день?' if event_rec[
+                'event_type'] == 'all_day' else 'мероприятие?'
             delete_text = first_sent, 'заметку.'
             event = f'📌 *Событие*: {event_rec["title"]}\n'
 
@@ -60,14 +63,16 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # СЦЕНАРИИ 2 и 3: Событий несколько
         else:
             # Магия: генерируем строго пронумерованный список одной строчкой кода!
-            events_list_text = build_events_list_text(event_text_record, numbered=True)
+            events_list_text = build_events_list_text(
+                event_text_record, numbered=True)
 
             if event_count < 11:
                 # Сценарий 2: Кнопок немного — выводим inline-клавиатуру номеров
                 await query.edit_message_text(
                     text="Нажмите на номер события, которое хотите удалить:\n\n"
                          f"{events_list_text}",
-                    reply_markup=generate_numbered_events_keyboard(event_count),
+                    reply_markup=generate_numbered_events_keyboard(
+                        event_count),
                     parse_mode="Markdown"
                 )
                 return CHOOSING_EVENT_TO_DELETE
@@ -90,9 +95,33 @@ async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DE
     return ConversationHandler.END
 
 
-async def confirm_to_delete(source, event, selected_date, delete_text):
-    """Универсальная функция отправки окна подтверждения."""
-    # Твой родной вариант форматирования даты, без выдуманных функций
+async def confirm_to_delete(
+    source: Union[CallbackQuery, Update],
+    event: str,
+    selected_date,
+    delete_text: tuple
+) -> int:
+    """
+    Универсальный фабричный хэндлер для рендеринга и отправки окна подтверждения удаления.
+    Динамически адаптируется под тип входящего события (клик по кнопке или текстовое сообщение).
+
+    Механика отправки:
+    - Проверяет через hasattr наличие метода 'edit_message_text'.
+    - Если True (вход по CallbackQuery): выполняет изменение старого сообщения «на лету»
+      без спама в чат.
+    - Если False (вход по Update через текст): отправляет новое сообщение ответом (reply_text).
+
+    Args:
+        source (Union[CallbackQuery, Update]): Источник вызова.
+        event (str): Сформированное строковое превью удаляемого события (или пачки событий).
+        selected_date (datetime.date): Целевая дата проведения мероприятия.
+        delete_text (tuple): Двухэлементный кортеж строк для динамической подстановки склонений 
+                             (например: ("событие №1?", "эту заметку.")).
+
+    Returns:
+        int: Состояние CONFIRMING_DELETE для перехвата следующего клика пользователя (Да/Нет).
+    """
+
     text_to_send = (
         f"❓ *Вы уверены, что хотите удалить {delete_text[0]}*\n\n"
         f"{event}"
@@ -115,6 +144,25 @@ async def confirm_to_delete(source, event, selected_date, delete_text):
 
 
 async def handle_delete_event_by_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Логика удаления событий, когда их в выбранном дне больше 10 штук.
+    Инлайн-кнопки не генерируются. Хэндлер перехватывает текстовое сообщение от юзера.
+
+    Пошаговая магия трансляции интерфейса в индекс:
+    1. Валидация строки (.isdigit()): проверяет, что прислали именно цифру, а не текст.
+    2. Валидация диапазона (от 1 до len(records)): защищает от ввода несуществующих номеров.
+       - При любых ошибках валидации возвращает юзера в текущий стейт TYPING_EVENT_NUMBER_TO_DELETE.
+    3. Вычисление индекса в Python (Смещение на -1):
+       - id_event = chosen_number - 1 (из человеческого "номер 1" получаем компьютерный индекс "0").
+    4. Захват первоисточника: выдергивает конкретный Record из ОЗУ по вычисленному индексу.
+    5. Фиксация таргетов удаления в ОЗУ для будущего SQL-запроса:
+       - context.user_data['column_name'] = 'id'
+       - context.user_data['delete_event_id'] = event_rec['id'] (первичный ключ Postgres).
+    6. Вызывает универсальный экран подтверждения confirm_to_delete.
+
+    Возвращает стейт CONFIRMING_DELETE.
+    """
+
     event_text_record = context.user_data.get('event_text_record', [])
     event_count = len(event_text_record)
     user_text = update.message.text.strip()
@@ -144,7 +192,8 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     selected_date = context.user_data.get('selected_date')
     delete_text = f"событие № {chosen_number}?", "эту заметку."
 
-    event_time = format_event_time(event_rec["start_time"], event_rec["end_time"])
+    event_time = format_event_time(
+        event_rec["start_time"], event_rec["end_time"])
     event = f"📌 *Событие*: \\[{event_time}] {event_rec['title']}\n"
 
     state = await confirm_to_delete(update, event, selected_date, delete_text)

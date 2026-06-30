@@ -42,21 +42,36 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
             return await handle_time_selection_option((query, day, month, year), events_text, is_adding=False)
         else:
             # Магия: генерируем красивый ненумерованный список дел одной строчкой
-            events_text = build_events_list_text(events_text_record, numbered=False)
+            events_text = build_events_list_text(
+                events_text_record, numbered=False)
             return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 
 
 async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) -> int:
-    query, day, month, year = args
-    # ---- СЦЕНАРИЙ А: НА ЭТОТ ДЕНЬ ЕСТЬ СОБЫТИЯ ----
+    """
+    Универсальный хэндлер для отображения главного меню дня (когда есть заметки).
+    Безопасно работает как с CallbackQuery (кнопки), так и с Update (текстовый ввод).
+    """
+    source, day, month, year = args
 
-    await query.edit_message_text(
-        text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
+    text_to_send = (
+        f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
         f"{events_text}"
-        f"Выберите действие с расписанием:",
-        reply_markup=generate_options_keyboard(),
-        parse_mode="Markdown"
+        f"Выберите действие с расписанием:"
     )
+
+    kwargs = {
+        "text": text_to_send,
+        "reply_markup": generate_options_keyboard(),
+        "parse_mode": "Markdown"
+    }
+
+    # Если source имеет метод edit_message_text — значит это CallbackQuery (гасим часики и правим на лету)
+    if hasattr(source, "edit_message_text"):
+        await source.edit_message_text(**kwargs)
+    else:
+        # Если это Update от MessageHandler — отправляем новым текстовым ответом в чат
+        await source.message.reply_text(**kwargs)
 
     return CHOOSING_ACTION
 
@@ -64,7 +79,6 @@ async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) 
 async def handle_time_selection_option(args: tuple, events_text: str = None, is_adding: bool = False) -> int:
     query, day, month, year = args
     # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ / ИЛИ НАЖАТА КНОПКА "ДОБАВИТЬ" ----
-
 
     await query.edit_message_text(
         text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"

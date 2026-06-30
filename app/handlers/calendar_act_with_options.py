@@ -6,7 +6,11 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_EVENT_TO_DELETE,
     CONFIRMING_DELETE,
-    TYPING_EVENT_NUMBER_TO_DELETE)
+    TYPING_EVENT_NUMBER_TO_DELETE,
+    CHOOSING_EDIT_FIELD,
+    SELECTING_EDIT_EVENT,
+    TYPING_EDIT_NUM
+)
 from app.handlers.calendar_keyboard import (
     generate_confirm_keyboard,
     generate_numbered_events_keyboard,
@@ -68,7 +72,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             return CHOOSING_EDIT_FIELD
 
         # ---- СЦЕНАРИЙ 2: Заметок от 2 до 10 включительно (Инлайн-кнопки) ----
-        elif 1 < event_count <= 10:
+        elif event_count < 11:
             # Собираем пронумерованные карточки для наглядности
             cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
             full_text = "Выберите номер события для редактирования:\n\n" + "\n".join(cards)

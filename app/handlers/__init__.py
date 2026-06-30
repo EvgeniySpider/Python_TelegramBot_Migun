@@ -15,6 +15,11 @@ from app.handlers.calendar_act_with_options import (
 )
 from app.handlers.calendar_callbacks import handle_calendar_click, handle_calendar_nav_click
 from app.handlers.calendar_delete_event import handle_delete_confirmation, handle_delete_choice
+from app.handlers.calendar_edit_flow import (
+    handle_edit_field_click,
+    handle_typing_edit_desc,
+    handle_typing_edit_title
+)
 from app.handlers.calendar_set_event import (
     handle_set_event,
     handle_title_input,
@@ -36,7 +41,9 @@ from app.handlers.states import (
     TYPING_EVENT_NUMBER_TO_DELETE,
     CHOOSING_EDIT_FIELD,
     SELECTING_EDIT_EVENT,
-    TYPING_EDIT_NUM
+    TYPING_EDIT_NUM,
+    TYPING_EDIT_TITLE,
+    TYPING_EDIT_DESC
 )
 
 # ============================================================================
@@ -56,7 +63,20 @@ calendar_conversation = ConversationHandler(
             # Кнопка возврата к общей сетке календаря на текущий месяц
             CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
         ],
-        
+        CHOOSING_EDIT_FIELD: [
+        # Ловим клики по кнопкам "Название", "Описание", "Время", "Дата" или "Назад"
+        CallbackQueryHandler(handle_edit_field_click, pattern=r"^edit_field:.+$"),
+        ],
+
+        TYPING_EDIT_TITLE: [
+        # Ловим текстовый ввод нового названия
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_title)
+        ],
+
+        TYPING_EDIT_DESC: [
+        # Ловим текстовый ввод нового описания
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_desc)
+        ],
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
         CONFIRMING_DELETE : [
             # Реагирует строго на кнопки подтверждения 'confirm_delete_yes' или отмены 'confirm_delete_no'

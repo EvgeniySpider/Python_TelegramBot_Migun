@@ -53,7 +53,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----
         if event_count == 1:
             # Из ОЗУ генерируем детальную карточку для единственного события (индекс 0)
-            detailed_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
+            detailed_event_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
             
             # Фиксируем в ОЗУ, какую именно запись мы сейчас будем редактировать
             context.user_data['edit_event_id'] = event_text_record[0]['id']
@@ -61,7 +61,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
             text = (
                 f"У вас 1 заметка. Выберите опцию, чтобы отредактировать её\n\n"
-                f"{detailed_text}"
+                f"{detailed_event_text}"
             )
             await query.edit_message_text(
                 text=text,

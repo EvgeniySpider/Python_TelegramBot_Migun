@@ -1,10 +1,18 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from app.handlers.states import CHOOSING_EDIT_FIELD, TYPING_EDIT_TITLE, TYPING_EDIT_DESC
-from app.core.calendar.utils import build_events_list_text
+from app.handlers.states import (
+    CHOOSING_EDIT_FIELD,
+    TYPING_EDIT_TITLE,
+    TYPING_EDIT_DESC,
+    TYPING_EDIT_NUM
+)
+from app.core.calendar.utils import build_events_list_text, build_detailed_event_text
 from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_day
+from app.handlers.calendar_keyboard import generate_edit_fields_keyboard
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
+
+
 async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Перехватывает клик по кнопкам 'Название', 'Описание' или 'Назад'."""
     query = update.callback_query
@@ -81,3 +89,69 @@ async def _refresh_day_menu_after_edit(update: Update, context: ContextTypes.DEF
                       selected_date.month, selected_date.year)
     )
     return state
+
+
+async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+
+    index_record = int(query.data.split(':')[1])
+    event_text_record = context.user_data.get('event_text_record')
+
+    context.user_data['edit_event_id'] = event_text_record[index_record]['id']
+    detailed_event_text = build_detailed_event_text(
+        event_text_record, index=index_record, numbered=False)
+
+    await query.edit_message_text(
+        text='Ваша заметка, которую вы собираетесь менять:\n\n'
+        f'{detailed_event_text}',
+        # Кнопки: Название, Время, Описание, Дата
+        reply_markup=generate_edit_fields_keyboard(),
+        parse_mode="Markdown"
+    )
+    return CHOOSING_EDIT_FIELD
+
+
+async def handle_edit_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Логика выбора события по его текстовому номеру в чате (когда задач > 10).
+    Валидирует ввод и переводит человеческий номер в индекс ОЗУ.
+    """
+    event_text_record = context.user_data.get('event_text_record', [])
+    event_count = len(event_text_record)
+    user_text = update.message.text.strip()
+
+    # 1. Проверяем, что прислали именно число
+    if not user_text.isdigit():
+        await update.message.reply_text(
+            f"❌ Ошибка: введите только **число** (цифру).\n"
+            f"Попробуйте еще раз (от 1 до {event_count}):",
+            parse_mode="Markdown"
+        )
+        return TYPING_EDIT_NUM
+
+    # 2. Проверяем границы диапазона
+    chosen_number = int(user_text)
+    if chosen_number < 1 or chosen_number > event_count:
+        await update.message.reply_text(
+            f"❌ Ошибка: события под номером {chosen_number} не существует.\n"
+            f"Введите число в диапазоне от 1 до {event_count}:"
+        )
+        return TYPING_EDIT_NUM
+
+    # 3. Переводим человеческий шаг в машинный индекс (смещение на -1)
+    index_record = chosen_number - 1
+    event_rec = event_text_record[index_record]
+
+    # 4. Фиксируем таргет в ОЗУ для будущих UPDATE-запросов
+    context.user_data['edit_event_id'] = event_rec['id']
+    
+    # 5. Генерируем чистую карточку без номера и выводим меню полей
+    detailed_text = build_detailed_event_text(event_text_record, index=index_record, numbered=False)
+
+    await update.message.reply_text(
+        text='Ваша заметка, которую вы собираетесь менять:\n\n'
+             f'{detailed_text}',
+        reply_markup=generate_edit_fields_keyboard(),
+        parse_mode="Markdown"
+    )
+    return CHOOSING_EDIT_FIELD

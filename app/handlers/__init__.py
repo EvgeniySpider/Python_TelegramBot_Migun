@@ -18,7 +18,9 @@ from app.handlers.calendar_delete_event import handle_delete_confirmation, handl
 from app.handlers.calendar_edit_flow import (
     handle_edit_field_click,
     handle_typing_edit_desc,
-    handle_typing_edit_title
+    handle_typing_edit_title,
+    handle_edit_event_selection,
+    handle_edit_event_by_text_number
 )
 from app.handlers.calendar_set_event import (
     handle_set_event,
@@ -66,6 +68,13 @@ calendar_conversation = ConversationHandler(
         CHOOSING_EDIT_FIELD: [
         # Ловим клики по кнопкам "Название", "Описание", "Время", "Дата" или "Назад"
         CallbackQueryHandler(handle_edit_field_click, pattern=r"^edit_field:.+$"),
+        ],
+
+        SELECTING_EDIT_EVENT: [
+            CallbackQueryHandler(handle_edit_event_selection, pattern=r"^edit_num:.+$")
+        ],
+        TYPING_EDIT_NUM: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_event_by_text_number)
         ],
 
         TYPING_EDIT_TITLE: [

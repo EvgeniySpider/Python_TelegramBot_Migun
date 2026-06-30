@@ -33,7 +33,10 @@ from app.handlers.states import (
     WAITING_FOR_TIME_INPUT_INTERVAL,
     CONFIRMING_DELETE,
     CHOOSING_EVENT_TO_DELETE,
-    TYPING_EVENT_NUMBER_TO_DELETE
+    TYPING_EVENT_NUMBER_TO_DELETE,
+    CHOOSING_EDIT_FIELD,
+    SELECTING_EDIT_EVENT,
+    TYPING_EDIT_NUM
 )
 
 # ============================================================================

@@ -175,3 +175,41 @@ def generate_numbered_events_keyboard(count: int = None) -> InlineKeyboardMarkup
     keyboard.extend(extra_keyboard)
 
     return InlineKeyboardMarkup(keyboard)
+
+
+def generate_numbered_edit_keyboard(count: int = None) -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру с номерами задач для их РЕДАКТИРОВАНИЯ/ПРОСМОТРА."""
+    keyboard = [[], []]
+
+    # Наполняем цифрами 1, 2, 3...
+    if count is not None:
+        for c in range(count):
+            button = InlineKeyboardButton(f"{c+1}", callback_data=f"edit_num:{c}")
+            if c < 5:
+                keyboard[0].append(button)
+            else:
+                keyboard[1].append(button)
+
+    # Сервисная кнопка возврата в меню дня
+    extra_keyboard = [
+        [InlineKeyboardButton("🔙 Назад", callback_data="edit_num:cancel")]
+    ]
+    keyboard.extend(extra_keyboard)
+    return InlineKeyboardMarkup(keyboard)
+
+
+def generate_edit_fields_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [
+        [
+            InlineKeyboardButton("✏️ Название", callback_data="edit_field:title"),
+            InlineKeyboardButton("✏️ Время", callback_data="edit_field:time")
+        ],
+        [
+            InlineKeyboardButton("✏️ Описание", callback_data="edit_field:desc"),
+            InlineKeyboardButton("✏️ Дату", callback_data="edit_field:date")
+        ],
+        [
+            InlineKeyboardButton("🔙 Назад к списку", callback_data="edit_field:cancel")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)

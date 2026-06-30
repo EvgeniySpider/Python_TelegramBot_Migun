@@ -7,8 +7,13 @@ from app.handlers.states import (
     CHOOSING_EVENT_TO_DELETE,
     CONFIRMING_DELETE,
     TYPING_EVENT_NUMBER_TO_DELETE)
-from app.handlers.calendar_keyboard import generate_confirm_keyboard, generate_numbered_events_keyboard
-from app.core.calendar.utils import format_event_time, build_events_list_text
+from app.handlers.calendar_keyboard import (
+    generate_confirm_keyboard,
+    generate_numbered_events_keyboard,
+    generate_numbered_edit_keyboard,
+    generate_edit_fields_keyboard
+)
+from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
 from typing import Union
 
 
@@ -17,6 +22,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
     selected_date = context.user_data.get('selected_date')
     event_text_record = context.user_data.get('event_text_record', [])
+    event_count = len(event_text_record)
 
     # Проверяем, какая именно кнопка была нажата
     if query.data == "action_create":
@@ -40,10 +46,57 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         return state
 
     elif query.data == "action_edit":
-        pass
+        # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----
+        if event_count == 1:
+            # Из ОЗУ генерируем детальную карточку для единственного события (индекс 0)
+            detailed_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
+            
+            # Фиксируем в ОЗУ, какую именно запись мы сейчас будем редактировать
+            context.user_data['edit_event_id'] = event_text_record[0]['id']
+            context.user_data['edit_event_index'] = 0
+
+            text = (
+                f"У вас 1 заметка. Выберите опцию, чтобы отредактировать её\n\n"
+                f"{detailed_text}"
+            )
+            await query.edit_message_text(
+                text=text,
+                reply_markup=generate_edit_fields_keyboard(),  # Кнопки: Название, Время, Описание, Дата
+                parse_mode="Markdown"
+            )
+            # Возвращаем новый стейт (импортируй его из app.handlers.states)
+            return CHOOSING_EDIT_FIELD
+
+        # ---- СЦЕНАРИЙ 2: Заметок от 2 до 10 включительно (Инлайн-кнопки) ----
+        elif 1 < event_count <= 10:
+            # Собираем пронумерованные карточки для наглядности
+            cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
+            full_text = "Выберите номер события для редактирования:\n\n" + "\n".join(cards)
+            
+            await query.edit_message_text(
+                text=full_text,
+                reply_markup=generate_numbered_edit_keyboard(event_count),  # Кнопки 1, 2, 3...
+                parse_mode="Markdown"
+            )
+            return SELECTING_EDIT_EVENT
+
+        # ---- СЦЕНАРИЙ 3: Заметок больше 10 (Строго Текстовый ввод числа) ----
+        else:
+            cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
+            full_text = (
+                "⚠️ Событий слишком много для отображения кнопок-номеров.\n\n"
+                "Пожалуйста, **пришлите цифру (номер) события** в ответном сообщении, которое хотите изменить:\n\n"
+            ) + "\n".join(cards)
+
+            # Передаем None, чтобы сгенерировалась клавиатура БЕЗ цифр (только нижний ряд "Назад")
+            await query.edit_message_text(
+                text=full_text,
+                reply_markup=generate_numbered_edit_keyboard(count=None),
+                parse_mode="Markdown"
+            )
+            return TYPING_EDIT_NUM
 
     elif query.data == "action_delete":
-        event_count = len(event_text_record)
 
         # СЦЕНАРИЙ 1: Событие ровно одно
         if event_count == 1:

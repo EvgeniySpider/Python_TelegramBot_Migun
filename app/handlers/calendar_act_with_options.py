@@ -1,6 +1,6 @@
 from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes, ConversationHandler
-from app.handlers.calendar_callbacks import handle_time_selection_option
+from app.handlers.calendar_callbacks import handle_time_selection_option, handle_options_with_exist_notes_in_day
 from app.handlers.commands import calendar_command
 from app.handlers.states import (
     CHOOSING_ACTION,
@@ -36,7 +36,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # Генерируем обычный текст списка задач "на лету" без засорения context.user_data
         current_events_text = build_events_list_text(
             event_text_record, numbered=False)
-        state = await handle_time_selection_option(args, current_events_text)
+        state = await handle_time_selection_option(args, current_events_text, is_adding=True)
         return state
 
     elif query.data == "action_edit":
@@ -198,3 +198,13 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
 
     state = await confirm_to_delete(update, event, selected_date, delete_text)
     return state
+
+
+async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    events_text_record = context.user_data['event_text_record']
+    events_text = build_events_list_text(events_text_record, numbered=False)
+    query = update.callback_query
+
+    date = context.user_data['selected_date']
+
+    return await handle_options_with_exist_notes_in_day(events_text, (query, date.day, date.month, date.year))

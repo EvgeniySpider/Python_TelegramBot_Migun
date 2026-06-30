@@ -88,8 +88,12 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
     return InlineKeyboardMarkup(keyboard)
 
 
-def generate_time_options_keyboard() -> InlineKeyboardMarkup:
+def generate_time_options_keyboard(is_adding=False) -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора формата времени для мероприятия."""
+
+    args_button = {'text': '🔙 Назад', 'callback_data': 'back_to_day_menu'} if is_adding \
+        else {'text': '🔙 Изменить дату', 'callback_data': 'action_back_to_calendar'}
+
     keyboard = [
         [
             InlineKeyboardButton(text="☀️ Весь день",
@@ -101,8 +105,7 @@ def generate_time_options_keyboard() -> InlineKeyboardMarkup:
         ],
         # РЯД 2: Кнопка возврата к сетке календаря
         [
-            InlineKeyboardButton(text="🔙 Изменить дату",
-                                 callback_data="action_back_to_calendar")
+            InlineKeyboardButton(**args_button)
         ]
     ]
     return InlineKeyboardMarkup(keyboard)

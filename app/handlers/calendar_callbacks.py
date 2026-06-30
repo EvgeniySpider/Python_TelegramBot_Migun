@@ -34,17 +34,15 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
 
     # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
-        events = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
-        context.user_data['event_text_record'] = events
+        events_text_record = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
+        context.user_data['event_text_record'] = events_text_record
 
-        if not events:
+        if not events_text_record:
             events_text = "На этот день ничего не запланировано.\n"
-            return await handle_time_selection_option((query, day, month, year), events_text)
+            return await handle_time_selection_option((query, day, month, year), events_text, is_adding=False)
         else:
             # Магия: генерируем красивый ненумерованный список дел одной строчкой
-            events_list = build_events_list_text(events, numbered=False)
-            events_text = f"{events_list}"
-
+            events_text = build_events_list_text(events_text_record, numbered=False)
             return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 
 
@@ -63,19 +61,16 @@ async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) 
     return CHOOSING_ACTION
 
 
-async def handle_time_selection_option(args: tuple, events_text: str = None) -> int:
+async def handle_time_selection_option(args: tuple, events_text: str = None, is_adding: bool = False) -> int:
     query, day, month, year = args
     # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ / ИЛИ НАЖАТА КНОПКА "ДОБАВИТЬ" ----
 
-    # Подстраховка на случай, если events_text не прилетел из внешнего вызова
-    if not events_text:
-        events_text = "На этот день ничего не запланировано.\n"
 
     await query.edit_message_text(
         text=f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
         f"{events_text}"
         f"Укажите формат времени проведения события:",
-        reply_markup=generate_time_options_keyboard(),
+        reply_markup=generate_time_options_keyboard(is_adding),
         parse_mode="Markdown"
     )
 

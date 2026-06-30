@@ -10,7 +10,8 @@ from app.handlers.commands import start, calendar_command
 from app.handlers.calendar_act_with_options import (
     handle_options_click,
     handle_back_to_calendar_click,
-    handle_delete_event_by_number
+    handle_delete_event_by_number,
+    handle_back_to_day_menu_click
 )
 from app.handlers.calendar_callbacks import handle_calendar_click, handle_calendar_nav_click
 from app.handlers.calendar_delete_event import handle_delete_confirmation, handle_delete_choice
@@ -78,7 +79,8 @@ calendar_conversation = ConversationHandler(
             # Перехват клика по кнопкам: "Весь день", "Точное время" или "Интервал"
             CallbackQueryHandler(handle_set_event, pattern=r"^event_time:.+$"),
             # Позволяет прервать сценарий создания и вернуться в сетку месяца
-            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^back_to_day_menu$"),
+            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"),
         ],
         
         # СТEЙТ 6: Ожидание ввода точного времени начала (формат ЧЧ:ММ, например 14:15)

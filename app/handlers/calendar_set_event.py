@@ -12,7 +12,11 @@ from app.handlers.states import (
 from app.handlers.calendar_keyboard import generate_yes_no_keyboard
 from app.core.calendar.repositories import CalendarRepository
 import re
-from app.core.calendar.utils import format_event_time, build_events_list_text
+from app.core.calendar.utils import (
+    format_event_time,
+    build_events_list_text,
+    normalize_time_str
+)
 
 
 async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -60,7 +64,7 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data['event_type'] = 'interval'
         # Магия: генерируем актуальный список на лету из первоисточника
         events_text = build_events_list_text(event_text_record, numbered=False)
-        
+
         await query.edit_message_text(
             text=f"📅 Выбрана дата: {data.day:02d}.{data.month:02d}.{data.year}\n\n"
             f"{events_text}"
@@ -86,13 +90,6 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
         return WAITING_FOR_TIME_INPUT_INTERVAL
 
     raw_start, raw_end = match_object[1], match_object[2]
-
-    def normalize_time_str(t_str: str) -> str:
-        if ":" not in t_str:
-            return f"{int(t_str):02d}:00"
-        else:
-            hours, minutes = t_str.split(":")
-            return f"{int(hours):02d}:{minutes}"
 
     try:
         start_clean = normalize_time_str(raw_start)

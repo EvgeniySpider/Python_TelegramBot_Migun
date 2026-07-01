@@ -20,7 +20,8 @@ from app.handlers.calendar_edit_flow import (
     handle_typing_edit_desc,
     handle_typing_edit_title,
     handle_edit_event_selection,
-    handle_edit_event_by_text_number
+    handle_edit_event_by_text_number,
+    handle_typing_edit_time
 )
 from app.handlers.calendar_set_event import (
     handle_set_event,
@@ -45,7 +46,8 @@ from app.handlers.states import (
     SELECTING_EDIT_EVENT,
     TYPING_EDIT_NUM,
     TYPING_EDIT_TITLE,
-    TYPING_EDIT_DESC
+    TYPING_EDIT_DESC,
+    TYPING_EDIT_TIME
 )
 
 # ============================================================================
@@ -90,6 +92,11 @@ calendar_conversation = ConversationHandler(
         # Ловим текстовый ввод нового описания
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_desc)
         ],
+
+        TYPING_EDIT_TIME: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_time)
+        ],
+
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
         CONFIRMING_DELETE : [
             # Реагирует строго на кнопки подтверждения 'confirm_delete_yes' или отмены 'confirm_delete_no'

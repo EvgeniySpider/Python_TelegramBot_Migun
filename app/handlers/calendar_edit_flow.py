@@ -4,12 +4,19 @@ from app.handlers.states import (
     CHOOSING_EDIT_FIELD,
     TYPING_EDIT_TITLE,
     TYPING_EDIT_DESC,
-    TYPING_EDIT_NUM
+    TYPING_EDIT_NUM,
+    TYPING_EDIT_TIME
 )
-from app.core.calendar.utils import build_events_list_text, build_detailed_event_text
+from app.core.calendar.utils import (
+    build_events_list_text,
+    build_detailed_event_text,
+    normalize_time_str
+)
 from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_day
 from app.handlers.calendar_keyboard import generate_edit_fields_keyboard
-from app.handlers.calendar_act_with_options import handle_back_to_day_menu_click
+import re
+from datetime import datetime
+from app.core.calendar.repositories import CalendarRepository
 
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
@@ -24,6 +31,13 @@ async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_
     elif query.data == "edit_field:desc":
         await query.edit_message_text(text="📖 Введите новое описание для этого события:")
         return TYPING_EDIT_DESC
+    
+    elif query.data == "edit_field:time":
+        await query.edit_message_text(
+            text="⏰ Введите новый временной интервал для этого события.\n"
+                 "Например: 9-10, 09:30-11 или 15:00-16:30:"
+        )
+        return TYPING_EDIT_TIME
 
 
 # --- ОБРАБОТКА ВВОДА ТЕКСТА ---
@@ -145,3 +159,88 @@ async def handle_edit_event_by_text_number(update: Update, context: ContextTypes
         parse_mode="Markdown"
     )
     return CHOOSING_EDIT_FIELD
+
+
+async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    raw_time = update.message.text.strip().replace(' ', '')
+    selected_date = context.user_data['selected_date']
+    event_id = int(context.user_data['edit_event_id'])
+
+    time_pattern = re.compile(r'^(\d{1,2}(?::\d{2})?)-(\d{1,2}(?::\d{2})?)$')
+    match_object = time_pattern.fullmatch(raw_time)
+
+    if match_object is None:
+        await update.message.reply_text(
+            text="❌ Неверный формат времени!\n"
+                 "Пожалуйста, введите интервал (например: 9-10, 09:30-11 или 15:00-16:30):"
+        )
+        return TYPING_EDIT_TIME
+    
+    raw_start, raw_end = match_object[1], match_object[2]
+
+    try:
+        start_clean = normalize_time_str(raw_start)
+        end_clean = normalize_time_str(raw_end)
+
+        start_time = datetime.strptime(start_clean, "%H:%M").time()
+        end_time = datetime.strptime(end_clean, "%H:%M").time()
+
+    except ValueError:
+        await update.message.reply_text(
+            text="❌ Введено некорректное время суток (максимум 23:59)!\n"
+            "Попробуйте ещё раз:"
+        )
+        return TYPING_EDIT_TIME
+
+    if end_time < start_time:
+        await update.message.reply_text(
+            text="❌ Ошибка: время начала не может быть позже времени окончания\n"
+            "Попробуйте ещё раз:"
+        )
+        return TYPING_EDIT_TIME
+    
+
+    async with context.application.database.connection() as conn:
+        is_busy_time = await CalendarRepository.has_time_conflict(
+            conn,
+            update.effective_user.id,
+            selected_date,
+            start_time,
+            end_time,
+            event_id
+        )
+        if is_busy_time:
+            await update.message.reply_text(
+                text="❌ Ошибка: это время занято\n"
+                "Попробуйте ещё раз:"
+            )
+            return TYPING_EDIT_TIME
+
+
+    async with context.application.database.connection() as conn:
+        await conn.execute(
+            """
+            UPDATE events 
+            SET start_time = $1, 
+                end_time = $2, 
+                event_type = 'interval' 
+            WHERE id = $3
+            """,
+            start_time,
+            end_time,
+            event_id
+        )
+
+    await update.message.reply_text(
+        text=f"Время события успешно изменено!\n"
+        f"⏰ Время начала: {start_time.strftime('%H:%M')}\n"
+        f"⏳ Время окончания: {end_time.strftime('%H:%M')}"
+    )
+
+    state = await _refresh_day_menu_after_edit(update, context)
+
+    return state
+
+
+
+# TYPING_EDIT_TIME

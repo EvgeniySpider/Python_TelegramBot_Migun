@@ -23,7 +23,7 @@ def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = F
             time_str = "(весь день)"
         else:
             time_str = format_event_time(el['start_time'], el['end_time'])
-            
+
         # 2. Формируем строку в зависимости от режима
         if numbered:
             # Формат для удаления: [ 1 ]  • Весь день Тестовая задача №1
@@ -31,8 +31,8 @@ def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = F
         else:
             # Обычный формат главного меню: • Весь день Тестовая задача №1
             line = f"• {el['title']} {time_str}" if time_str == '(весь день)' \
-            else f"• {time_str} {el['title']}"
-            
+                else f"• {time_str} {el['title']}"
+
         raw_lines.append(line)
 
     return "Запланированные дела: \n" + "\n".join(raw_lines) + "\n\n"
@@ -44,24 +44,32 @@ def build_detailed_event_text(events: List[Union[Record, dict]], index: int = 0,
     """
     if not events or index >= len(events):
         return "❌ Ошибка: Событие не найдено.\n\n"
-        
+
     el = events[index]
-    
+
     # Сразу форматируем время, так как данные гарантированно валидны
-    time_str = format_event_time(el['start_time'], el['end_time'])
-        
+    time_str = ('Весь день') if el['start_time'] is None else \
+        format_event_time(el['start_time'], el['end_time'])
+
     # Безопасно вытаскиваем описание
     desc_str = el.get('description')
     if not desc_str:
         desc_str = "Не указано"
-        
+
     header = f"📝 *Просмотр события №{index + 1}*" if numbered else "📝 *Детальный просмотр события*"
-    
+
     card_lines = [
         header,
         f"📌 *Название*: {el['title']}",
         f"⏳ *Время*: {time_str}",
         f"📖 *Описание*: {desc_str}\n"
     ]
-    
+
     return "\n".join(card_lines)
+
+def normalize_time_str(t_str: str) -> str:
+    if ":" not in t_str:
+        return f"{int(t_str):02d}:00"
+    else:
+        hours, minutes = t_str.split(":")
+        return f"{int(hours):02d}:{minutes}"

@@ -1,10 +1,8 @@
-from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_day
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.commands import calendar_command
-from app.handlers.states import CHOOSING_ACTION
 from app.core.calendar.repositories import CalendarRepository
-from app.handlers.calendar_act_with_options import confirm_to_delete
+from app.handlers.calendar_act_with_options import confirm_to_delete, handle_back_to_day_menu_click
 from app.core.calendar.utils import format_event_time, build_events_list_text
 
 
@@ -43,16 +41,8 @@ async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAU
     # Если пользователь нажал "Нет, назад"
     else:
         context.user_data.pop('delete_event_id', None)
-        event_text_record = context.user_data.get('event_text_record', [])
-        selected_date = context.user_data.get('selected_date')
-
-        # Получаем готовую строку со всеми заголовками из утилиты
-        events_text = build_events_list_text(event_text_record, numbered=False)
-
-        args = (query, selected_date.day,
-                selected_date.month, selected_date.year)
-        await handle_options_with_exist_notes_in_day(events_text, args)
-        return CHOOSING_ACTION
+        state = await handle_back_to_day_menu_click(update, context)
+        return state
 
 
 async def prepare_after_delete(update: Update, context: ContextTypes.DEFAULT_TYPE, query) -> int:

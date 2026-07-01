@@ -13,6 +13,14 @@ from app.core.calendar.services import CalendarService
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Если зафиксирован флаг изменения даты — делегируем управление хэндлеру-изменителю даты
+    if context.user_data.get('is_editing_date_mode'):
+        # Удаляем флаг, чтобы не зацикливаться
+        context.user_data.pop('is_editing_date_mode', None)
+        
+        from app.handlers.calendar_edit_flow import handle_edit_date_selection
+        return await handle_edit_date_selection(update, context)
+    
     query = update.callback_query
 
     parts = query.data.split(":")

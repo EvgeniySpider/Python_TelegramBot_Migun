@@ -54,7 +54,10 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         if event_count == 1:
             # Из ОЗУ генерируем детальную карточку для единственного события (индекс 0)
             detailed_event_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
-            
+
+            context.user_data['current_event_time'] = (
+                event_text_record[0]['start_time'], event_text_record[0]['end_time'])
+
             # Фиксируем в ОЗУ, какую именно запись мы сейчас будем редактировать
             context.user_data['edit_event_id'] = event_text_record[0]['id']
             context.user_data['edit_event_index'] = 0

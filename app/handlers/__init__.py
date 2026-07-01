@@ -67,14 +67,18 @@ calendar_conversation = ConversationHandler(
         ],
         CHOOSING_EDIT_FIELD: [
         # Ловим клики по кнопкам "Название", "Описание", "Время", "Дата" или "Назад"
+        CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_field:cancel$"),
         CallbackQueryHandler(handle_edit_field_click, pattern=r"^edit_field:.+$"),
         ],
 
         SELECTING_EDIT_EVENT: [
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_num:cancel$"),
             CallbackQueryHandler(handle_edit_event_selection, pattern=r"^edit_num:.+$")
         ],
+
         TYPING_EDIT_NUM: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_event_by_text_number)
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_event_by_text_number),
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_num:cancel$")
         ],
 
         TYPING_EDIT_TITLE: [

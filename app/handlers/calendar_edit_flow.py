@@ -9,10 +9,10 @@ from app.handlers.states import (
 from app.core.calendar.utils import build_events_list_text, build_detailed_event_text
 from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_day
 from app.handlers.calendar_keyboard import generate_edit_fields_keyboard
+from app.handlers.calendar_act_with_options import handle_back_to_day_menu_click
+
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
-
-
 async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Перехватывает клик по кнопкам 'Название', 'Описание' или 'Назад'."""
     query = update.callback_query
@@ -24,17 +24,6 @@ async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_
     elif query.data == "edit_field:desc":
         await query.edit_message_text(text="📖 Введите новое описание для этого события:")
         return TYPING_EDIT_DESC
-
-    elif query.data == "edit_field:cancel":
-        # Бесшовный возврат в главное меню дня
-        events_text_record = context.user_data.get('event_text_record', [])
-        events_text = build_events_list_text(
-            events_text_record, numbered=False)
-        date = context.user_data['selected_date']
-
-        return await handle_options_with_exist_notes_in_day(
-            events_text, (query, date.day, date.month, date.year)
-        )
 
 
 # --- ОБРАБОТКА ВВОДА ТЕКСТА ---
@@ -144,9 +133,10 @@ async def handle_edit_event_by_text_number(update: Update, context: ContextTypes
 
     # 4. Фиксируем таргет в ОЗУ для будущих UPDATE-запросов
     context.user_data['edit_event_id'] = event_rec['id']
-    
+
     # 5. Генерируем чистую карточку без номера и выводим меню полей
-    detailed_text = build_detailed_event_text(event_text_record, index=index_record, numbered=False)
+    detailed_text = build_detailed_event_text(
+        event_text_record, index=index_record, numbered=False)
 
     await update.message.reply_text(
         text='Ваша заметка, которую вы собираетесь менять:\n\n'

@@ -1,5 +1,5 @@
 from datetime import datetime
-from telegram import Update, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.core.calendar.services import CalendarService
 from app.handlers.calendar_keyboard import generate_calendar_keyboard

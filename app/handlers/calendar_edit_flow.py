@@ -82,7 +82,6 @@ async def _refresh_day_menu_after_edit(update: Update, context: ContextTypes.DEF
 
     # Перезапрашиваем свежие данные из базы, чтобы ОЗУ бота синхронизировалось с изменениями
     async with context.application.database.connection() as conn:
-        from app.core.calendar.repositories import CalendarRepository  # Импорт по месту
         updated_records = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
 
     context.user_data['event_text_record'] = updated_records
@@ -93,7 +92,7 @@ async def _refresh_day_menu_after_edit(update: Update, context: ContextTypes.DEF
     # Так как мы пришли из обычного текстового сообщения (MessageHandler),
     # передаем сам update, под капотом сработает отправка нового сообщения (reply_text)
     state = await handle_options_with_exist_notes_in_day(
-        events_text, (update, selected_date.day,
+        events_text, (update.callback_query, selected_date.day,
                       selected_date.month, selected_date.year)
     )
     return state
@@ -295,11 +294,12 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
     from datetime import date
     target_date = date(int(year_str), int(month_str), int(day_str))
     
-    # 2. Быстрая проверка: если дата не изменилась, просто выходим
+    # --- КЕЙС: Пользователь нажал на ту же самую дату ---
     if target_date == context.user_data['selected_date']:
-        await query.answer("Вы выбрали ту же самую дату")
-        from app.handlers.states import CHOOSING_EDIT_FIELD
-        return CHOOSING_EDIT_FIELD
+        await query.answer("❌ Вы выбрали ту же самую дату! Выберите другой день.")
+        # ВАЖНО: Мы НЕ удаляем флаг. Мы возвращаем тот же стейт.
+        # Календарь висит на экране, флаг в ОЗУ активен. Юзер может кликать дальше!
+        return TYPING_EDIT_DATE
 
     # 3. Достаем параметры редактируемого события из ОЗУ
     event_id = context.user_data['edit_event_id']
@@ -311,11 +311,8 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
     busy_dict = {rec['day']: rec['status'] for rec in busy_days} if isinstance(busy_days, list) else busy_days
     target_day_status = busy_dict.get(target_date.day)
 
-    from app.core.calendar.repositories import CalendarRepository
-    from app.handlers.states import TYPING_EDIT_DATE
 
-    async with context.application.database.connection() as conn:
-        
+    async with context.application.database.connection() as conn:        
         # --- СЦЕНАРИЙ А: Переносим событие 'all_day' ---
         if start_time is None:
             # Если день занят хотя бы частично ('partial' или 'full') — перенос невозможен
@@ -364,6 +361,8 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
 
     # 4. Обновляем selected_date в контексте, чтобы меню дня перерендерилось на НОВОЙ дате
     context.user_data['selected_date'] = target_date
+    # Сбрасываем флаг перенаправляющий сюда по клику на день
+    context.user_data.pop('is_editing_date_mode', None)
 
     await query.message.reply_text(
         text=f"✅ Дата события успешно изменено на {target_date.strftime('%d.%m.%Y')}!"

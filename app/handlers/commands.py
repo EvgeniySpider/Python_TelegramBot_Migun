@@ -54,7 +54,8 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         busy_days=busy_days
     )
 
-    text_content = "📅 Инлайн-Календарь\n\nВыберите день:"
+    text_content = "📅 Ваш календарь событий.\n\n Выберите день месяца ниже," \
+    "чтобы посмотреть расписание, добавить новую заметку или изменить существующие дела:"
 
     # 4. РАЗВЕТВЛЕНИЕ МЕТОДА ОТПРАВКИ
     if update.callback_query:

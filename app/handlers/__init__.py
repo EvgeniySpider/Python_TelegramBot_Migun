@@ -59,7 +59,7 @@ from app.handlers.states import (
 calendar_conversation = ConversationHandler(
     # Точка входа в диалог: срабатывает исключительно при клике на конкретный день месяца
     entry_points=[
-        CallbackQueryHandler(handle_calendar_click, pattern=r"^calendar_day:")
+        CallbackQueryHandler(handle_calendar_click, pattern = r"^(calendar_day:.+|calendar_ignore)$")
     ],
     
     states={
@@ -166,8 +166,6 @@ calendar_conversation = ConversationHandler(
     
     # Системные команды экстренного выхода, доступные пользователю на любом этапе диалога
     fallbacks=[
-        # Принудительное закрытие диалога и сброс текущего состояния автомата
-        CommandHandler("cancel", lambda u, c: ConversationHandler.END),
         # Сброс текущей ветки и вызов свежего календаря поверх старого интерфейса
         CommandHandler("calendar", calendar_command)
     ],

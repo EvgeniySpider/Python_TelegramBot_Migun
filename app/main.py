@@ -19,6 +19,11 @@ class Application(PTBApplication):
     @staticmethod
     async def initialize_dependencies(application: "Application") -> None:
         await application.database.initialize()
+        # Регистрируем команду в интерфейсе Телеграма при старте скрипта
+        # Это мгновенно включит нативную кнопку "Меню" у ВСЕХ пользователей
+        await application.bot.set_my_commands([
+            ("calendar", "📅 Открыть интерактивный календарь")
+        ])
 
     @staticmethod
     async def shutdown_dependencies(application: "Application") -> None:

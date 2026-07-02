@@ -110,6 +110,7 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
     index_record = int(query.data.split(':')[1])
     event_text_record = context.user_data.get('event_text_record')
     event_rec = event_text_record[index_record]
+    context.user_data['edit_event_index'] = index_record
 
     context.user_data['current_event_time'] = (event_rec['start_time'],
                                                event_rec['end_time'])
@@ -157,7 +158,8 @@ async def handle_edit_event_by_text_number(update: Update, context: ContextTypes
     # 3. Переводим человеческий шаг в машинный индекс (смещение на -1)
     index_record = chosen_number - 1
     event_rec = event_text_record[index_record]
-
+    context.user_data['edit_event_index'] = index_record
+    
     # 4. Фиксируем таргет в ОЗУ для будущих UPDATE-запросов
     context.user_data['edit_event_id'] = event_rec['id']
     context.user_data['current_event_time'] = (event_rec['start_time'],
@@ -272,7 +274,7 @@ async def handle_edit_field_date(update: Update, context: ContextTypes.DEFAULT_T
 
     # 3. Генерируем клавиатуру стандартным методом
     calendar_markup = generate_calendar_keyboard(
-        year=year, month=month, busy_days=busy_days, editing_day = day)
+        year=year, month=month, busy_days=busy_days, editing_day=day, is_back_button=True)
     # 4. ВЫПОЛНЯЕМ ВСЕГО ОДИН ОПРЯТНЫЙ РЕДАКТ ЭКРАНА
     await query.edit_message_text(
         text="📅 **Изменение даты события**\n\n"
@@ -365,6 +367,33 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
     # Сбрасываем флаг перенаправляющий сюда по клику на день
     context.user_data.pop('is_editing_date_mode', None)
     context.user_data['edit_success_status'] = f"✅ Дата успешно изменена на {target_date.strftime('%d.%m.%Y')}!"
-    
+
     # 5. Синхронизируем ОЗУ и возвращаем пользователя в главное меню дня
     return await _refresh_day_menu_after_edit(update, context)
+
+
+async def back_to_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+
+    event_text_record = context.user_data.get('event_text_record', [])
+    current_index = context.user_data.get('edit_event_index', 0)
+    
+
+    detailed_event_text = build_detailed_event_text(
+        event_text_record, index=current_index, numbered=False
+    )
+
+    if context.user_data.get('is_editing_date_mode'):
+        context.user_data['is_editing_date_mode'] = False
+
+    # Динамический заголовок (чтобы интерфейс соответствовал реальности)
+    header = "У вас 1 заметка. Выберите опцию, чтобы отредактировать её:\n\n" \
+    if len(event_text_record) == 1 else "Ваша заметка, которую вы собираетесь менять:\n\n"
+
+    await query.edit_message_text(
+        text=f"{header}{detailed_event_text}",
+        reply_markup=generate_edit_fields_keyboard(),  # Кнопки: Название, Время, Описание, Дата
+        parse_mode="Markdown"
+    )
+
+    return CHOOSING_EDIT_FIELD

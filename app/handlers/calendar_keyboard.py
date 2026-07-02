@@ -2,7 +2,12 @@ import calendar
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None, editing_day: int = None) -> InlineKeyboardMarkup:
+def generate_calendar_keyboard(
+    year: int, month: int,
+    busy_days: set[int] = None,
+    editing_day: int = None,
+    is_back_button: bool = False
+) -> InlineKeyboardMarkup:
     """Генерирует календарь с inline-кнопками"""
     # 1. Получаем текстовое название месяца (пока на английском, потом русифицируем)
     if busy_days is None:
@@ -81,12 +86,20 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
     next_month = month + 1 if month < 12 else 1
     next_year = year if month < 12 else year + 1
 
-    keyboard.append([
-        InlineKeyboardButton(
-            text="« Пред", callback_data=f"calendar_nav:{prev_year}:{prev_month}"),
-        InlineKeyboardButton(
-            text="След »", callback_data=f"calendar_nav:{next_year}:{next_month}")
-    ])
+
+    nav_row = [
+            InlineKeyboardButton(text="« Пред", callback_data=f"calendar_nav:{prev_year}:{prev_month}")
+        ]
+
+    if is_back_button:
+        nav_row.append(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_edit_menu"))
+
+        # 3. Добавляем в конец ряда правую стрелочку
+    nav_row.append(
+        InlineKeyboardButton(text="След »", callback_data=f"calendar_nav:{next_year}:{next_month}")
+    )
+        # 4. И уже готовый, чистый ряд без всяких списков-матрешек пушим в клавиатуру
+    keyboard.append(nav_row)
 
     return InlineKeyboardMarkup(keyboard)
 

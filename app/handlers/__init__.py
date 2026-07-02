@@ -22,7 +22,8 @@ from app.handlers.calendar_edit_flow import (
     handle_edit_event_selection,
     handle_edit_event_by_text_number,
     handle_typing_edit_time,
-    handle_edit_date_selection
+    handle_edit_date_selection,
+    back_to_edit_menu
 )
 from app.handlers.calendar_set_event import (
     handle_set_event,
@@ -100,7 +101,8 @@ calendar_conversation = ConversationHandler(
         ],
         TYPING_EDIT_DATE: [
             # Если пользователь внутри редактирования даты нажмет на день месяца:
-            CallbackQueryHandler(handle_edit_date_selection, pattern=r"^calendar_day:")
+            CallbackQueryHandler(handle_edit_date_selection, pattern=r"^calendar_day:"),
+            CallbackQueryHandler(back_to_edit_menu, pattern=r"^back_to_edit_menu$")
         ],
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
         CONFIRMING_DELETE : [

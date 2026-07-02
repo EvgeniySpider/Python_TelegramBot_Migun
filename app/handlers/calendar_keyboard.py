@@ -2,7 +2,7 @@ import calendar
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None) -> InlineKeyboardMarkup:
+def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None, editing_day: int = None) -> InlineKeyboardMarkup:
     """Генерирует календарь с inline-кнопками"""
     # 1. Получаем текстовое название месяца (пока на английском, потом русифицируем)
     if busy_days is None:
@@ -53,8 +53,11 @@ def generate_calendar_keyboard(year: int, month: int, busy_days: set[int] = None
                     text=" ", callback_data="calendar_ignore"
                 ))
             else:
+                if editing_day is not None and day == editing_day:
+                    # Эффект вырезанного дня — серый круг
+                    button_text = f"⚪ {day}"
                 # 1. Определяем огонёк для full/partial дней
-                if busy_days.get(day) == 'full':
+                elif busy_days.get(day) == 'full':
                     button_text = f"🔴 {day}"
                 elif busy_days.get(day) == 'partial':
                     button_text = f"🟡 {day}"

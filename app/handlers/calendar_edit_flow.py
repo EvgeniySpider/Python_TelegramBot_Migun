@@ -16,8 +16,9 @@ from app.core.calendar.utils import (
 from app.handlers.calendar_callbacks import handle_options_with_exist_notes_in_day
 from app.handlers.calendar_keyboard import generate_edit_fields_keyboard, generate_calendar_keyboard
 import re
-from datetime import datetime
+from datetime import datetime, date
 from app.core.calendar.repositories import CalendarRepository
+from app.core.calendar.services import CalendarService
 
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
@@ -89,10 +90,15 @@ async def _refresh_day_menu_after_edit(update: Update, context: ContextTypes.DEF
     # Рендерим меню дня заново
     events_text = build_events_list_text(updated_records, numbered=False)
 
+    # Вытаскиваем статус успеха, если он есть, и тут же стираем его из ОЗУ
+    success_banner = context.user_data.pop('edit_success_status', "")
+    # Если баннер есть, склеиваем его с основным текстом
+    full_text = f"{success_banner}\n\n{events_text}" if success_banner else events_text
+
     # Так как мы пришли из обычного текстового сообщения (MessageHandler),
     # передаем сам update, под капотом сработает отправка нового сообщения (reply_text)
     state = await handle_options_with_exist_notes_in_day(
-        events_text, (update.callback_query, selected_date.day,
+        full_text, (update.callback_query, selected_date.day,
                       selected_date.month, selected_date.year)
     )
     return state
@@ -254,10 +260,9 @@ async def handle_edit_field_date(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
 
     extracted_date = context.user_data['selected_date']
-    year, month = extracted_date.year, extracted_date.month
+    year, month, day = extracted_date.year, extracted_date.month, extracted_date.day
 
     # 2. Идем в БД за занятыми днями через готовый сервис
-    from app.core.calendar.services import CalendarService
     async with context.application.database.connection() as conn:
         busy_days = await CalendarService.get_user_busy_days(
             conn=conn, user_id=user_id, year=year, month=month
@@ -267,11 +272,11 @@ async def handle_edit_field_date(update: Update, context: ContextTypes.DEFAULT_T
 
     # 3. Генерируем клавиатуру стандартным методом
     calendar_markup = generate_calendar_keyboard(
-        year=year, month=month, busy_days=busy_days)
-
+        year=year, month=month, busy_days=busy_days, editing_day = day)
     # 4. ВЫПОЛНЯЕМ ВСЕГО ОДИН ОПРЯТНЫЙ РЕДАКТ ЭКРАНА
     await query.edit_message_text(
         text="📅 **Изменение даты события**\n\n"
+             f"Изменяемая дата: {day:02d}.{month:02d}.{year}\n"
              "Выберите на календаре ниже новую дату для этого мероприятия:",
         reply_markup=calendar_markup,
         parse_mode="Markdown"
@@ -291,7 +296,6 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
     
     # 1. Извлекаем целевую дату из callback_data
     _, year_str, month_str, day_str = query.data.split(':')
-    from datetime import date
     target_date = date(int(year_str), int(month_str), int(day_str))
     
     # --- КЕЙС: Пользователь нажал на ту же самую дату ---
@@ -319,8 +323,7 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
             if target_day_status is not None:
                 await query.answer(
                     "❌ Ошибка: Нельзя перенести событие 'Весь день' на эту дату, "
-                    "так как день уже занят другими делами!", 
-                    show_alert=True
+                    "так как день уже занят другими делами!" 
                 )
                 return TYPING_EDIT_DATE
 
@@ -337,8 +340,7 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
                 has_all_day = await conn.fetchval(query_all_day, user_id, target_date)
                 if has_all_day:
                     await query.answer(
-                        "❌ Ошибка: Этот день полностью занят событием 'Весь день'!", 
-                        show_alert=True
+                        "❌ Ошибка: Этот день полностью занят событием 'Весь день'!"
                     )
                     return TYPING_EDIT_DATE
 
@@ -348,8 +350,7 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
             )
             if is_busy_time:
                 await query.answer(
-                    "❌ Ошибка: Выбранное время на этой дате уже занято другим событием!", 
-                    show_alert=True
+                    "❌ Ошибка: Выбранное время на этой дате уже занято другим событием!"
                 )
                 return TYPING_EDIT_DATE
 
@@ -363,10 +364,7 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
     context.user_data['selected_date'] = target_date
     # Сбрасываем флаг перенаправляющий сюда по клику на день
     context.user_data.pop('is_editing_date_mode', None)
-
-    await query.message.reply_text(
-        text=f"✅ Дата события успешно изменено на {target_date.strftime('%d.%m.%Y')}!"
-    )
-
+    context.user_data['edit_success_status'] = f"✅ Дата успешно изменена на {target_date.strftime('%d.%m.%Y')}!"
+    
     # 5. Синхронизируем ОЗУ и возвращаем пользователя в главное меню дня
     return await _refresh_day_menu_after_edit(update, context)

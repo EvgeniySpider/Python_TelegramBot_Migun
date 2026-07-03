@@ -272,14 +272,33 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         report_text += f"📝 Описание: {description}\n\n"
 
     context.user_data['edit_success_status'] = report_text
+
+    # --- ТОТАЛЬНАЯ СИНХРОНИЗАЦИЯ ОЗУ С БД ---
+    from app.core.calendar.repositories import CalendarRepository
+    # Импортируем сервис, который считает занятые дни
+    from app.core.calendar.services import CalendarService
+
+    async with context.application.database.connection() as conn:
+        # 1. Обновляем список текстовых записей дня (чтобы удалить/изменить видели всё)
+        updated_records = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
+        
+        # 2. Пересчитываем занятые дни месяца (чтобы кнопка "Добавить" знала про лимиты)
+        busy_days = await CalendarService.get_user_busy_days(
+            conn=conn,
+            user_id=user_id,
+            year=selected_date.year,
+            month=selected_date.month
+        )
+    
+    # Записываем свежие данные в ОЗУ
+    context.user_data['event_text_record'] = updated_records
+    context.user_data['month_busy_days'] = busy_days
+
     from app.handlers.calendar_act_with_options import handle_back_to_day_menu_click
     state = await handle_back_to_day_menu_click(update, context)
-    # if update.callback_query:
-    #     await update.callback_query.edit_message_text(text=report_text)
-    # else:
-    #     await update.message.reply_text(text=report_text)
 
-    # Перфекционизм: точечно чистим только мусор от текущей сессии создания
-    for key in ['event_type', 'event_title', 'start_time', 'end_time', 'description', 'event_text_record']:
+    # Чистим только временный мусор конструктора
+    for key in ['event_type', 'event_title', 'start_time', 'end_time', 'description']:
         context.user_data.pop(key, None)
+
     return state

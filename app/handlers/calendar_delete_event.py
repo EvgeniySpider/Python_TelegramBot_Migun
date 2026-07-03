@@ -59,12 +59,12 @@ async def prepare_after_delete(update: Update, context: ContextTypes.DEFAULT_TYP
     Returns:
         int: Состояние ConversationHandler.END для полной деактивации и завершения диалога.
     """
-
     # Подчищаем за собой оперативку
     context.user_data.pop('delete_event_id', None)
     context.user_data.pop('event_text_record', None)
-
-    await query.edit_message_text(text="🗑️ Мероприятие успешно удалено!")
+    alert_text = context.user_data.pop(
+        'delete_alert_text', "🗑️ Мероприятие успешно удалено!")
+    await query.answer(text=alert_text)
     # Вызываем календарь заново, чтобы юзер видел актуальную сетку месяца
     await calendar_command(update, context)
     return ConversationHandler.END
@@ -125,14 +125,14 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
 
     elif query.data == 'del_num:everything':
         selected_date = context.user_data.get('selected_date')
-
+        context.user_data['delete_alert_text'] = "🗑️ Все мероприятия успешно удалены!"
         # 1. Готовим таргеты для SQL-запроса (удаляем пачкой по дате)
         context.user_data['delete_event_id'] = selected_date
         context.user_data['column_name'] = 'event_date'
 
         # Магия: генерируем обычный красивый список для превью одной строчкой!
         events_preview = build_events_list_text(
-            event_text_record, numbered=False) + "\n\n"
+            event_text_record, numbered=False)
 
         # 3. Задаем динамический текст склонений для нашего универсального confirm_to_delete
         delete_text = (

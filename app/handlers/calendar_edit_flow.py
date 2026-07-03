@@ -56,8 +56,7 @@ async def handle_typing_edit_title(update: Update, context: ContextTypes.DEFAULT
     async with context.application.database.connection() as conn:
         await conn.execute("UPDATE events SET title = $1 WHERE id = $2", new_title, event_id)
 
-    await update.message.reply_text(text="✅ Название события успешно изменено!")
-
+    context.user_data['edit_success_status'] = "✅ Название события успешно изменено!"
     # Сбрасываем пользователя обратно в главное меню месяца или дня
     # Для простоты пока отправляем в стейт выбора действий дня, предварительно обновив ОЗУ
     return await _refresh_day_menu_after_edit(update, context)
@@ -71,7 +70,7 @@ async def handle_typing_edit_desc(update: Update, context: ContextTypes.DEFAULT_
     async with context.application.database.connection() as conn:
         await conn.execute("UPDATE events SET description = $1 WHERE id = $2", new_desc, event_id)
 
-    await update.message.reply_text(text="✅ Описание события успешно изменено!")
+    context.user_data['edit_success_status'] = "✅ Описание события успешно изменено!"
     return await _refresh_day_menu_after_edit(update, context)
 
 
@@ -86,20 +85,20 @@ async def _refresh_day_menu_after_edit(update: Update, context: ContextTypes.DEF
         updated_records = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
 
     context.user_data['event_text_record'] = updated_records
-
+    event_count = len(updated_records)
     # Рендерим меню дня заново
-    events_text = build_events_list_text(updated_records, numbered=False)
+    cards = [build_detailed_event_text(
+                updated_records, index=i, numbered=True) for i in range(event_count)]
+    events_text = "\n".join(cards) + '\n'
 
     # Вытаскиваем статус успеха, если он есть, и тут же стираем его из ОЗУ
     success_banner = context.user_data.pop('edit_success_status', "")
     # Если баннер есть, склеиваем его с основным текстом
-    full_text = f"{success_banner}\n\n{events_text}" if success_banner else events_text
-
-    # Так как мы пришли из обычного текстового сообщения (MessageHandler),
-    # передаем сам update, под капотом сработает отправка нового сообщения (reply_text)
+    header = f"{success_banner}\n\n" if success_banner else ''
+    source = update.callback_query if update.message is None else update
     state = await handle_options_with_exist_notes_in_day(
-        full_text, (update.callback_query, selected_date.day,
-                      selected_date.month, selected_date.year)
+        events_text, (source, selected_date.day,
+                    selected_date.month, selected_date.year), header=header
     )
     return state
 
@@ -246,11 +245,12 @@ async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_
             event_id
         )
 
-    await update.message.reply_text(
-        text=f"Время события успешно изменено!\n"
+    
+        header = (f"✅ Время события успешно изменено!\n"
         f"⏰ Время начала: {start_time.strftime('%H:%M')}\n"
-        f"⏳ Время окончания: {end_time.strftime('%H:%M')}"
-    )
+        f"⏳ Время окончания: {end_time.strftime('%H:%M')}")
+    
+    context.user_data['edit_success_status'] = header
 
     state = await _refresh_day_menu_after_edit(update, context)
     return state
@@ -290,7 +290,7 @@ async def handle_edit_field_date(update: Update, context: ContextTypes.DEFAULT_T
 
 async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Выпускной экзамен: валидация конфликтов при переносе события на новую дату.
+    Валидация конфликтов при переносе события на новую дату.
     Проверяет all_day, точечные конфликты временных интервалов и обновляет БД.
     """
     query = update.callback_query
@@ -366,8 +366,8 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
     context.user_data['selected_date'] = target_date
     # Сбрасываем флаг перенаправляющий сюда по клику на день
     context.user_data.pop('is_editing_date_mode', None)
-    context.user_data['edit_success_status'] = f"✅ Дата успешно изменена на {target_date.strftime('%d.%m.%Y')}!"
 
+    await query.answer(text=f"✅ Дата успешно изменена на {target_date.strftime('%d.%m.%Y')}!")
     # 5. Синхронизируем ОЗУ и возвращаем пользователя в главное меню дня
     return await _refresh_day_menu_after_edit(update, context)
 

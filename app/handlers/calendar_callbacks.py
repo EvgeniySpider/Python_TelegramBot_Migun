@@ -53,16 +53,16 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
             return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 
 
-async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple) -> int:
+async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple, header: str = None) -> int:
     """
     Универсальный хэндлер для отображения главного меню дня (когда есть заметки).
     Безопасно работает как с CallbackQuery (кнопки), так и с Update (текстовый ввод).
     """
     source, day, month, year = args
-
+    header = header if header else ''
     text_to_send = (
-        f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n"
-        f"{events_text}"
+        f'{header}'
+        f"📅 *Выбранная дата*: {day:02d}.{month:02d}.{year}\n\n{events_text}"
         f"Выберите действие с расписанием:"
     )
 

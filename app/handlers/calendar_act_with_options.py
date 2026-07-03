@@ -261,10 +261,14 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
 
 
 async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    events_text_record = context.user_data['event_text_record']
-    events_text = build_events_list_text(events_text_record, numbered=False)
-    query = update.callback_query
+    event_text_record = context.user_data['event_text_record']
+    event_count = len(event_text_record)
+    cards = [build_detailed_event_text(
+            event_text_record, index=i, numbered=True) for i in range(event_count)]
+    events_text = "\n".join(cards) + '\n'
 
+    source = update.callback_query if update.callback_query else update
     date = context.user_data['selected_date']
+    header = context.user_data.get('edit_success_status', '')
 
-    return await handle_options_with_exist_notes_in_day(events_text, (query, date.day, date.month, date.year))
+    return await handle_options_with_exist_notes_in_day(events_text,(source, date.day, date.month, date.year), header=header)

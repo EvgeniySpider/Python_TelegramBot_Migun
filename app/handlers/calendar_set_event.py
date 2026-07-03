@@ -221,8 +221,8 @@ async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if query.data == "desc_no":
         context.user_data['description'] = None
-        await _save_event_to_db(update, context)
-        return ConversationHandler.END
+        state = await _save_event_to_db(update, context)
+        return state
 
     if query.data == "desc_yes":
         await query.edit_message_text(
@@ -233,8 +233,8 @@ async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_description_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['description'] = update.message.text
-    await _save_event_to_db(update, context)
-    return ConversationHandler.END
+    state = await _save_event_to_db(update, context)
+    return state
 
 
 async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -262,20 +262,24 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         duration_text = format_event_time(start_time, end_time)
 
     report_text = (
-        f"🎉 Мероприятие успешно добавлено!\n\n"
+        f"*🎉 Мероприятие успешно добавлено!*\n"
         f"📅 Дата: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n"
         f"📌 Событие: {event_title}\n"
-        f"⏰ Время: {duration_text}"
+        f"⏰ Время: {duration_text}\n"
     )
 
     if description:
-        report_text += f"\n📝 Описание: {description}"
+        report_text += f"📝 Описание: {description}\n\n"
 
-    if update.callback_query:
-        await update.callback_query.edit_message_text(text=report_text)
-    else:
-        await update.message.reply_text(text=report_text)
+    context.user_data['edit_success_status'] = report_text
+    from app.handlers.calendar_act_with_options import handle_back_to_day_menu_click
+    state = await handle_back_to_day_menu_click(update, context)
+    # if update.callback_query:
+    #     await update.callback_query.edit_message_text(text=report_text)
+    # else:
+    #     await update.message.reply_text(text=report_text)
 
     # Перфекционизм: точечно чистим только мусор от текущей сессии создания
     for key in ['event_type', 'event_title', 'start_time', 'end_time', 'description', 'event_text_record']:
         context.user_data.pop(key, None)
+    return state

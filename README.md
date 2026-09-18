@@ -1,4 +1,4 @@
 Проект: Telegram-бот с функцией календаря
-Мигун Евгений
-EvgeniySpider
-evgeniy.migun@mail.ru
+Имя Фамилия — Евгений Мигун
+логин на GitHub — EvgeniySpider
+e-mail — evgeniy.migun@mail.ru

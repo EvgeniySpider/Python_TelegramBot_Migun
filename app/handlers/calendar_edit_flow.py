@@ -9,7 +9,6 @@ from app.handlers.states import (
     TYPING_EDIT_DATE
 )
 from app.core.calendar.utils import (
-    build_events_list_text,
     build_detailed_event_text,
     normalize_time_str
 )

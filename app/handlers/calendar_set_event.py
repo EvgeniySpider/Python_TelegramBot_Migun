@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, time
 from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes
 from app.handlers.states import (
     WAITING_FOR_TITLE,
     WAITING_FOR_DESC_CHOICE,

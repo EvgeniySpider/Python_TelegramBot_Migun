@@ -246,14 +246,15 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     start_time = context.user_data.get('start_time')
     end_time = context.user_data.get('end_time')
     description = context.user_data.get('description')
+    created_at = datetime.now()
 
     async with context.application.database.connection() as conn:
         await conn.execute(
             """
-            INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, description)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, created_at, description)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
-            user_id, event_type, event_title, selected_date, start_time, end_time, description
+            user_id, event_type, event_title, selected_date, start_time, end_time, created_at, description
         )
 
     if event_type == 'all_day':

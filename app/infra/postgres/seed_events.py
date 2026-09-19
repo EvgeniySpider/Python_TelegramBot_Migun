@@ -16,11 +16,12 @@ def seed_test_data_usual_events() -> None:
     print("Запуск заполнения тестовыми данными (фиксированные дни 6, 18, 25)...")
 
     insert_query = """
-    INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, description)
-    VALUES (%s, %s, %s, %s, %s, %s, %s);
+    INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, created_at, description)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
     """
 
     year, month = get_current_year_and_month()
+    now = datetime.now()
 
     # Жестко фиксируем дни, чтобы исключить любые конфликты
     day_all_day = 6
@@ -30,26 +31,27 @@ def seed_test_data_usual_events() -> None:
     test_events = [
         # 1. Событие на весь день (6 число)
         (YOUR_TELEGRAM_ID, 'all_day', 'Поездка на дачу',
-         datetime(year, month, day_all_day).date(), None, None, 'Шашлык машлык'),
+         datetime(year, month, day_all_day).date(), None, None, now, 'Шашлык машлык'),
 
         # 2. Событие со строгим интервалом времени (18 число)
         (YOUR_TELEGRAM_ID, 'interval', 'Созвон по проекту',
-         datetime(year, month, day_interval).date(), time(14, 0, 0), time(15, 0, 0), 'Обсудить архитектуру бота'),
+         datetime(year, month, day_interval).date(), time(14, 0, 0), time(15, 0, 0), now, 'Обсудить архитектуру бота'),
 
         # 3. Второе событие со строгим интервалом времени (18 число)
         (YOUR_TELEGRAM_ID, 'interval', 'Созвон по проекту',
-         datetime(year, month, day_interval).date(), time(9, 0, 0), time(10, 0, 0), 'Погулять с хорошим мальчиком'),
+         datetime(year, month, day_interval).date(), time(9, 0, 0), time(10, 0, 0), now, 'Погулять с хорошим мальчиком'),
 
         # 4. Событие на конкретное (точное) время (25 число)
         (YOUR_TELEGRAM_ID, 'exact', 'Отключить компрессор',
-         datetime(year, month, day_exact).date(), time(19, 30, 0), time(20, 0, 0), None)
+         datetime(year, month, day_exact).date(), time(19, 30, 0), time(20, 0, 0), now, None)
     ]
 
     with psycopg2.connect(settings.secret_dsn.get_secret_value()) as conn:
         with conn.cursor() as cursor:
+            # Создаём пользователя с датой регистрации, если его ещё нет
             cursor.execute(
-                "INSERT INTO users (telegram_id) VALUES (%s) ON CONFLICT DO NOTHING;",
-                (YOUR_TELEGRAM_ID,)
+                "INSERT INTO users (telegram_id, registered_at) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                (YOUR_TELEGRAM_ID, now)
             )
             cursor.executemany(insert_query, test_events)
             conn.commit()
@@ -60,11 +62,12 @@ def seed_test_data_usual_events() -> None:
 
 def seed_test_data() -> None:
     insert_query = """
-    INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, description)
-    VALUES (%s, %s, %s, %s, %s, %s, %s);
+    INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, created_at, description)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
     """
 
     year, month = get_current_year_and_month()
+    now = datetime.now()
 
     # Плотный день для теста лимитов (11 задач) жестко сажаем на 15 число
     limit_test_day = 15
@@ -85,15 +88,17 @@ def seed_test_data() -> None:
             test_date,
             time(start_hour, 0, 0),
             time(end_hour, 0, 0),
+            now,
             f'Описание для задачи {i+1}'
         )
         test_events.append(event_tuple)
 
     with psycopg2.connect(settings.secret_dsn.get_secret_value()) as conn:
         with conn.cursor() as cursor:
+            # Создаём пользователя с датой регистрации, если его ещё нет
             cursor.execute(
-                "INSERT INTO users (telegram_id) VALUES (%s) ON CONFLICT DO NOTHING;",
-                (YOUR_TELEGRAM_ID,)
+                "INSERT INTO users (telegram_id, registered_at) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                (YOUR_TELEGRAM_ID, now)
             )
             cursor.executemany(insert_query, test_events)
             conn.commit()

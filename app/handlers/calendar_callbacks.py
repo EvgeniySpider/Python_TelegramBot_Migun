@@ -1,7 +1,9 @@
 import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
+
 from app.core.calendar.repositories import CalendarRepository
+from app.core.stats.repositories import StatsRepository
 from app.handlers.calendar_keyboard import (
     generate_time_options_keyboard,
     generate_options_keyboard,
@@ -24,6 +26,9 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     if parts[0] != "calendar_day":
         await query.answer()
         return
+
+    stats_repo: StatsRepository = context.application.stats_repository
+    await stats_repo.increment_metric('calendar_clicks')
 
     year = int(parts[1])
     month = int(parts[2])

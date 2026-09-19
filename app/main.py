@@ -1,3 +1,4 @@
+from app.core.stats.repositories import StatsRepository
 from app.core.users.repositories import UserRepository
 from app.core.users.services import UserService
 from telegram.ext import Application as PTBApplication, ApplicationBuilder
@@ -15,6 +16,8 @@ class Application(PTBApplication):
         self.database = Database(dsn=app_settings.secret_dsn)
         user_repository = UserRepository(database=self.database)
         self.user_service = UserService(repository=user_repository)
+
+        self.stats_repository = StatsRepository(db=self.database)
 
     @staticmethod
     async def initialize_dependencies(application: "Application") -> None:

@@ -103,4 +103,9 @@ class CalendarRepository:
             DELETE FROM events
             WHERE {column_name} = $1;
         '''
-        await conn.execute(query, value)
+        result = await conn.execute(query, value)
+
+        # Извлечение числа с помощью split
+        # "DELETE 5".split() -> ["DELETE", "5"] -> int("5") = 5
+        deleted_count = int(result.split()[-1])
+        return deleted_count

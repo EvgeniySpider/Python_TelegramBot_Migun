@@ -83,10 +83,15 @@ async def del_event_on_info(context: ContextTypes.DEFAULT_TYPE, column_name: str
     """
 
     async with context.application.database.connection() as conn:
-        await CalendarRepository.delete_events_by_filter(
+        deleted_count: int = await CalendarRepository.delete_events_by_filter(
             conn,
             column_name,
             value
+        )
+    # Если что-то реально было удалено, увеличиваем счетчик на это количество
+    if deleted_count > 0:
+        await context.application.stats_repository.increment_metric(
+            'events_deleted', amount=deleted_count
         )
 
 

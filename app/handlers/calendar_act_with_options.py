@@ -1,5 +1,7 @@
 from telegram import Update, CallbackQuery
 from telegram.ext import ContextTypes, ConversationHandler
+from typing import Union
+
 from app.handlers.calendar_callbacks import handle_time_selection_option, handle_options_with_exist_notes_in_day
 from app.handlers.commands import calendar_command
 from app.handlers.states import (
@@ -13,12 +15,56 @@ from app.handlers.states import (
 )
 from app.handlers.calendar_keyboard import (
     generate_confirm_keyboard,
-    generate_numbered_events_keyboard,
     generate_numbered_action_keyboard,
     generate_edit_fields_keyboard
 )
 from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
-from typing import Union
+
+
+async def show_event_selection_list(query: CallbackQuery, event_text_record: list, action: str) -> int:
+    """Отрисовывает список событий (от 2 шт.) для выбора и возвращает нужный стейт."""
+    event_count = len(event_text_record)
+    
+    # Генерация карточек происходит один раз
+    cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
+
+    # Настраиваем тексты и стейты в зависимости от действия
+    if action == "edit":
+        prefix = "edit_num"
+        prompt_inline = "Выберите номер события для редактирования:\n\n"
+        prompt_text_input = "Отправьте номер события в чат, чтобы его изменить:\n\n"
+        state_inline = SELECTING_EDIT_EVENT
+        state_text = TYPING_EDIT_NUM
+        
+    elif action == "delete":
+        prefix = "del_num"
+        prompt_inline = "Выберите номер события для удаления:\n\n"
+        prompt_text_input = "Отправьте номер события в чат, чтобы его удалить:\n\n"
+        state_inline = CHOOSING_EVENT_TO_DELETE
+        state_text = TYPING_EVENT_NUMBER_TO_DELETE
+
+    # СЦЕНАРИЙ 2: Инлайн-кнопки (от 2 до 10)
+    if event_count < 11:
+        full_text = prompt_inline + "\n".join(cards)
+        await query.edit_message_text(
+            text=full_text,
+            reply_markup=generate_numbered_action_keyboard(event_count, prefix=prefix),
+            parse_mode="Markdown"
+        )
+        return state_inline
+
+    # СЦЕНАРИЙ 3: Ввод текста (больше 10)
+    else:
+        full_text = (
+            "⚠️ Событий слишком много для отображения кнопок-номеров.\n\n"
+            f"{prompt_text_input}"
+        ) + "\n".join(cards)
+        await query.edit_message_text(
+            text=full_text,
+            reply_markup=generate_numbered_action_keyboard(count=None, prefix=prefix),
+            parse_mode="Markdown"
+        )
+        return state_text
 
 
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -50,62 +96,27 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         return state
 
     elif query.data == "action_edit":
-        # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----
+        # Уникальная логика, если заметка всего одна
         if event_count == 1:
-            # Из ОЗУ генерируем детальную карточку для единственного события (индекс 0)
             detailed_event_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
-
-            context.user_data['current_event_time'] = (
-                event_text_record[0]['start_time'], event_text_record[0]['end_time'])
-
-            # Фиксируем в ОЗУ, какую именно запись мы сейчас будем редактировать
+            
+            context.user_data['current_event_time'] = (event_text_record[0]['start_time'], event_text_record[0]['end_time'])
             context.user_data['edit_event_id'] = event_text_record[0]['id']
             context.user_data['edit_event_index'] = 0
 
-            text = (
-                f"У вас 1 заметка. Выберите опцию, чтобы отредактировать её\n\n"
-                f"{detailed_event_text}"
-            )
+            text = f"У вас 1 заметка. Выберите опцию, чтобы отредактировать её\n\n{detailed_event_text}"
             await query.edit_message_text(
                 text=text,
-                reply_markup=generate_edit_fields_keyboard(),  # Кнопки: Название, Время, Описание, Дата
+                reply_markup=generate_edit_fields_keyboard(),
                 parse_mode="Markdown"
             )
-            # Возвращаем новый стейт (импортируй его из app.handlers.states)
             return CHOOSING_EDIT_FIELD
 
-        # ---- СЦЕНАРИЙ 2: Заметок от 2 до 10 включительно (Инлайн-кнопки) ----
-        elif event_count < 11:
-            # Собираем пронумерованные карточки для наглядности
-            cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
-            full_text = "Выберите номер события для редактирования:\n\n" + "\n".join(cards)
-            
-            await query.edit_message_text(
-                text=full_text,
-                reply_markup=generate_numbered_action_keyboard(event_count),  # Кнопки 1, 2, 3...
-                parse_mode="Markdown"
-            )
-            return SELECTING_EDIT_EVENT
-
-        # ---- СЦЕНАРИЙ 3: Заметок больше 10 (Строго Текстовый ввод числа) ----
-        else:
-            cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
-            full_text = (
-                "⚠️ Событий слишком много для отображения кнопок-номеров.\n\n"
-                "Пожалуйста, **пришлите цифру (номер) события** в ответном сообщении, которое хотите изменить:\n\n"
-            ) + "\n".join(cards)
-
-            # Передаем None, чтобы сгенерировалась клавиатура БЕЗ цифр (только нижний ряд "Назад")
-            await query.edit_message_text(
-                text=full_text,
-                reply_markup=generate_numbered_action_keyboard(count=None),
-                parse_mode="Markdown"
-            )
-            return TYPING_EDIT_NUM
+        # Если заметок больше одной — отдаем отрисовку списка помощнику
+        return await show_event_selection_list(query, event_text_record, action="edit")
 
     elif query.data == "action_delete":
-
-        # СЦЕНАРИЙ 1: Событие ровно одно
+        # Уникальная логика, если заметка всего одна (например, сразу кнопки Да/Нет)
         if event_count == 1:
             event_rec = event_text_record[0]
 
@@ -120,33 +131,10 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             state = await confirm_to_delete(query, event, selected_date, delete_text)
             return state
 
-        # СЦЕНАРИИ 2 и 3: Событий несколько
-        else:
-            # Магия: генерируем строго пронумерованный список одной строчкой кода!
-            events_list_text = build_events_list_text(
-                event_text_record, numbered=True)
 
-            if event_count < 11:
-                # Сценарий 2: Кнопок немного — выводим inline-клавиатуру номеров
-                await query.edit_message_text(
-                    text="Нажмите на номер события, которое хотите удалить:\n\n"
-                         f"{events_list_text}",
-                    reply_markup=generate_numbered_events_keyboard(
-                        event_count),
-                    parse_mode="Markdown"
-                )
-                return CHOOSING_EVENT_TO_DELETE
-            else:
-                # Сценарий 3: Событий > 10 — вызываем клавиатуру без аргументов (только нижний ряд)
-                await query.edit_message_text(
-                    text="⚠️ Событий слишком много для отображения кнопок-номеров.\n\n"
-                         "1️⃣ **Пришлите цифру (номер) события** в ответном сообщении, чтобы удалить его отдельно.\n"
-                         "2️⃣ Либо нажмите кнопку ниже, чтобы очистить весь день разом:\n\n"
-                         f"{events_list_text}",
-                    reply_markup=generate_numbered_events_keyboard(),
-                    parse_mode="Markdown"
-                )
-                return TYPING_EVENT_NUMBER_TO_DELETE
+        # Если заметок больше одной — отдаем отрисовку списка помощнику
+        return await show_event_selection_list(query, event_text_record, action="delete")
+
 
 
 async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

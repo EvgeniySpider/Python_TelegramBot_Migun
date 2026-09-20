@@ -12,7 +12,10 @@ class Database:
     async def initialize(self) -> None:
         dns_string = str(self._dsn.get_secret_value())
 
-        self._pool = await asyncpg.create_pool(dsn=dns_string)
+        self._pool = await asyncpg.create_pool(
+        dsn=dns_string,
+        timeout=5.0  # Ждать освобождения коннекта максимум 5 секунд
+        )
 
     async def shutdown(self) -> None:
         if self._pool:

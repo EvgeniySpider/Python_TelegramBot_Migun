@@ -52,6 +52,47 @@ class Event(models.Model):
         return f"[{self.event_type}] {self.title} ({self.event_date})"
 
 
+class Appointment(models.Model):
+    """Модель приглашения на встречу (связывает Событие и Участника)."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Ожидание"
+        CONFIRMED = "confirmed", "Подтверждено"
+        CANCELLED = "cancelled", "Отменено"
+
+    # Событие (в нем уже лежат дата, время и организатор - event.user)
+    event = models.ForeignKey(
+        Event, 
+        on_delete=models.CASCADE, 
+        related_name="appointments",
+        verbose_name="Событие"
+    )
+    # Кого приглашаем
+    invitee = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name="invitations",
+        verbose_name="Приглашенный (Участник)"
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=Status.choices, 
+        default=Status.PENDING,
+        verbose_name="Статус"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
+
+    class Meta:
+        db_table = "appointments"
+        verbose_name = "Встреча"
+        verbose_name_plural = "Встречи"
+        # Защита от дублей: один юзер может быть приглашен на одно событие только один раз
+        unique_together = ('event', 'invitee')
+
+    def __str__(self) -> str:
+        return f"Встреча: {self.event.user_id} пригласил {self.invitee_id} на '{self.event.title}'"
+
+
 class BotStatistics(models.Model):
     date = models.DateField(unique=True, verbose_name="Дата")
 

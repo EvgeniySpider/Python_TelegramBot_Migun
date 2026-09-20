@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Event, User, BotStatistics
+from .models import Event, User, BotStatistics, Appointment
 
 
 @admin.register(User)
@@ -72,3 +72,6 @@ class BotStatisticsAdmin(admin.ModelAdmin):
     @admin.display(description="Всего создано событий")
     def total_created_events_display(self, obj):
         return obj.total_events_created
+
+
+admin.site.register(Appointment)

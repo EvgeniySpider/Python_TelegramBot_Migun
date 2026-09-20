@@ -15,3 +15,6 @@ TYPING_EDIT_TITLE = 13,
 TYPING_EDIT_DESC = 14,
 TYPING_EDIT_TIME = 15,
 TYPING_EDIT_DATE = 16
+SELECTING_INVITE_EVENT = 17  # Выбор инлайн-кнопкой (2-10 событий)
+TYPING_INVITE_NUM = 18       # Ввод номера текстом (>10 событий)
+TYPING_INVITEE_ID = 19

@@ -33,25 +33,7 @@ from app.handlers.calendar_set_event import (
     handle_time_input_exact,
     handle_time_input_interval,
 )
-from app.handlers.states import (
-    CHOOSING_TIME,
-    WAITING_FOR_TITLE,
-    WAITING_FOR_DESC_CHOICE,
-    WAITING_FOR_DESCRIPTION,
-    CHOOSING_ACTION,
-    WAITING_FOR_TIME_INPUT_EXACT,
-    WAITING_FOR_TIME_INPUT_INTERVAL,
-    CONFIRMING_DELETE,
-    CHOOSING_EVENT_TO_DELETE,
-    TYPING_EVENT_NUMBER_TO_DELETE,
-    CHOOSING_EDIT_FIELD,
-    SELECTING_EDIT_EVENT,
-    TYPING_EDIT_NUM,
-    TYPING_EDIT_TITLE,
-    TYPING_EDIT_DESC,
-    TYPING_EDIT_TIME,
-    TYPING_EDIT_DATE
-)
+from app.handlers.states import *
 
 # ============================================================================
 # ГЛАВНЫЙ ДИАЛОГОВЫЙ СЦЕНАРИЙ МОДУЛЯ КАЛЕНДАРЯ (FSM)
@@ -65,8 +47,8 @@ calendar_conversation = ConversationHandler(
     states={
         # СТEЙТ 1: Главное меню выбранного дня (когда в дне уже есть события)
         CHOOSING_ACTION : [
-            # Перехват действий пользователя: Создать новое, Редактировать или Удалить запись
-            CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete)$"),
+            # Перехват действий пользователя: Создать новое, Редактировать, Удалить запись или Назначить встречу
+            CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete|action_invite)$"),
             # Кнопка возврата к общей сетке календаря на текущий месяц
             CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
         ],
@@ -104,6 +86,24 @@ calendar_conversation = ConversationHandler(
             CallbackQueryHandler(handle_edit_date_selection, pattern=r"^calendar_day:"),
             CallbackQueryHandler(back_to_edit_menu, pattern=r"^back_to_edit_menu$")
         ],
+        # -----------------------------------------------------------
+        # SELECTING_INVITE_EVENT: [
+        #     CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$"),
+        #     CallbackQueryHandler(handle_invite_event_selection, pattern=r"^invite_num:.+$")
+        # ],
+
+        # TYPING_INVITE_NUM: [
+        #     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invite_event_by_text_number),
+        #     CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$")
+        # ],
+
+        # TYPING_INVITEE_ID: [
+        #     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_invitee_id),
+        #     # Кнопка отмены на случай, если юзер передумал вводить ID
+        #     CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^cancel_invite$")
+        # ],
+        # -----------------------------------------------------------
+
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
         CONFIRMING_DELETE : [
             # Реагирует строго на кнопки подтверждения 'confirm_delete_yes' или отмены 'confirm_delete_no'

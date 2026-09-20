@@ -131,6 +131,9 @@ def generate_options_keyboard() -> InlineKeyboardMarkup:
     options_keyboard = [
         [
             InlineKeyboardButton("➕ Добавить", callback_data="action_create"),
+            InlineKeyboardButton("🤝 Пригласить", callback_data="action_invite")
+        ],
+        [
             InlineKeyboardButton("✏️ Изменить", callback_data="action_edit"),
             InlineKeyboardButton("❌ Удалить", callback_data="action_delete")
         ],
@@ -193,14 +196,14 @@ def generate_numbered_events_keyboard(count: int = None) -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(keyboard)
 
 
-def generate_numbered_edit_keyboard(count: int = None) -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру с номерами задач для их РЕДАКТИРОВАНИЯ/ПРОСМОТРА."""
+def generate_numbered_action_keyboard(count: int = None, prefix: str = "edit_num") -> InlineKeyboardMarkup:
+    """Генерирует клавиатуру с номерами задач для РЕДАКТИРОВАНИЯ или ПРИГЛАШЕНИЯ."""
     keyboard = [[], []]
 
     # Наполняем цифрами 1, 2, 3...
     if count is not None:
         for c in range(count):
-            button = InlineKeyboardButton(f"{c+1}", callback_data=f"edit_num:{c}")
+            button = InlineKeyboardButton(f"{c+1}", callback_data=f"{prefix}:{c}")
             if c < 5:
                 keyboard[0].append(button)
             else:
@@ -208,7 +211,7 @@ def generate_numbered_edit_keyboard(count: int = None) -> InlineKeyboardMarkup:
 
     # Сервисная кнопка возврата в меню дня
     extra_keyboard = [
-        [InlineKeyboardButton("🔙 Назад", callback_data="edit_num:cancel")]
+        [InlineKeyboardButton("🔙 Назад", callback_data=f"{prefix}:cancel")]
     ]
     keyboard.extend(extra_keyboard)
     return InlineKeyboardMarkup(keyboard)

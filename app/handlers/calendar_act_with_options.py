@@ -14,7 +14,7 @@ from app.handlers.states import (
 from app.handlers.calendar_keyboard import (
     generate_confirm_keyboard,
     generate_numbered_events_keyboard,
-    generate_numbered_edit_keyboard,
+    generate_numbered_action_keyboard,
     generate_edit_fields_keyboard
 )
 from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
@@ -82,7 +82,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             
             await query.edit_message_text(
                 text=full_text,
-                reply_markup=generate_numbered_edit_keyboard(event_count),  # Кнопки 1, 2, 3...
+                reply_markup=generate_numbered_action_keyboard(event_count),  # Кнопки 1, 2, 3...
                 parse_mode="Markdown"
             )
             return SELECTING_EDIT_EVENT
@@ -98,7 +98,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             # Передаем None, чтобы сгенерировалась клавиатура БЕЗ цифр (только нижний ряд "Назад")
             await query.edit_message_text(
                 text=full_text,
-                reply_markup=generate_numbered_edit_keyboard(count=None),
+                reply_markup=generate_numbered_action_keyboard(count=None),
                 parse_mode="Markdown"
             )
             return TYPING_EDIT_NUM

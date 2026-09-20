@@ -248,6 +248,7 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     description = context.user_data.get('description')
     created_at = datetime.now()
 
+
     async with context.application.database.connection() as conn:
         await conn.execute(
             """
@@ -256,6 +257,17 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             """,
             user_id, event_type, event_title, selected_date, start_time, end_time, created_at, description
         )
+        
+    EVENT_TYPE_TO_METRIC = {
+    'all_day': 'events_created_all_day',
+    'exact': 'events_created_exact',
+    'interval': 'events_created_interval',
+    }
+    metric_name = EVENT_TYPE_TO_METRIC.get(event_type)
+    # Инкрементируем созданное событие по типу, напр: all_day -> events_created_all_day += 1
+    if metric_name:
+        await context.application.stats_repository.increment_metric(metric_name)
+
 
     if event_type == 'all_day':
         duration_text = 'Весь день'

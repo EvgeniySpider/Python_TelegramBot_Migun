@@ -152,7 +152,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             # Фиксируем в ОЗУ ID события, на которое будем приглашать
             context.user_data['invite_event_id'] = event_text_record[0]['id']
             
-            # Можно вытащить название для красивого отображения
+            # Вытаскиваем название для красивого отображения
             event_title = event_text_record[0]['title']
 
             text = (
@@ -160,10 +160,9 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 "Пожалуйста, **отправьте Telegram ID** пользователя, которого хотите пригласить:"
             )
             
-            # Клавиатуру можно передать пустую или с кнопкой "Назад"
             await query.edit_message_text(
                 text=text,
-                reply_markup=generate_back_to_menu_button(), # Твоя функция для кнопки назад
+                reply_markup=generate_back_to_menu_button(),
                 parse_mode="Markdown"
             )
             return TYPING_INVITEE_ID

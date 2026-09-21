@@ -6,7 +6,7 @@ from telegram.ext import (
     ConversationHandler, 
     filters
 )
-from app.handlers.calendar_invite import handle_invitee_id_input
+from app.handlers.calendar_invite import handle_invite_event_by_text_number, handle_invite_event_selection, handle_invitee_id_input
 from app.handlers.commands import start, calendar_command
 from app.handlers.calendar_act_with_options import (
     handle_options_click,
@@ -87,23 +87,22 @@ calendar_conversation = ConversationHandler(
             CallbackQueryHandler(handle_edit_date_selection, pattern=r"^calendar_day:"),
             CallbackQueryHandler(back_to_edit_menu, pattern=r"^back_to_edit_menu$")
         ],
-        # -----------------------------------------------------------
-        # SELECTING_INVITE_EVENT: [
-        #     CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$"),
-        #     CallbackQueryHandler(handle_invite_event_selection, pattern=r"^invite_num:.+$")
-        # ],
 
-        # TYPING_INVITE_NUM: [
-        #     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invite_event_by_text_number),
-        #     CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$")
-        # ],
+        SELECTING_INVITE_EVENT: [
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$"),
+            CallbackQueryHandler(handle_invite_event_selection, pattern=r"^invite_num:.+$")
+        ],
+
+        TYPING_INVITE_NUM: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invite_event_by_text_number),
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$")
+        ],
 
         TYPING_INVITEE_ID: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invitee_id_input),
             # Кнопка отмены на случай, если юзер передумал вводить ID
             CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^cancel_invite$")
         ],
-        # -----------------------------------------------------------
 
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
         CONFIRMING_DELETE : [

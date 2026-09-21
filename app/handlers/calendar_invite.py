@@ -1,8 +1,77 @@
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
+from app.handlers.calendar_keyboard import generate_back_to_menu_button
 from app.handlers.commands import calendar_command
-from app.handlers.states import TYPING_INVITEE_ID
+from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID
+
+
+async def handle_invite_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    event_text_record = context.user_data.get('event_text_record')
+    event_count = len(event_text_record)
+    user_text = update.message.text.strip()
+
+    # 1. Проверяем, что прислали именно число
+    if not user_text.isdigit():
+        await update.message.reply_text(
+            f"❌ Ошибка: введите только *число* (цифру).\n"
+            f"Попробуйте еще раз (от 1 до {event_count}):",
+            parse_mode="Markdown"
+        )
+        return TYPING_INVITE_NUM
+
+    # 2. Проверяем границы диапазона
+    chosen_number = int(user_text)
+    if chosen_number < 1 or chosen_number > event_count:
+        await update.message.reply_text(
+            f"❌ Ошибка: события под номером {chosen_number} не существует.\n"
+            f"Введите число в диапазоне от 1 до {event_count}:"
+        )
+        return TYPING_INVITE_NUM
+
+    # 3. Переводим человеческий шаг в машинный индекс (смещение на -1)
+    index_record = chosen_number - 1
+
+    context.user_data['invite_event_id'] = event_text_record[index_record]['id']
+    event_title = event_text_record[index_record]['title']
+
+    text = (
+        f"Выбрано событие: *{event_title}*\n\n"
+        "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
+    )
+
+    await update.message.reply_text(
+        text=text,
+        reply_markup=generate_back_to_menu_button(),
+        parse_mode="Markdown"
+    )
+    return TYPING_INVITEE_ID
+
+
+async def handle_invite_event_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    raw_click_data: str = query.data
+    index_record: int = int(raw_click_data.split(':')[-1])
+
+    event_text_record = context.user_data.get('event_text_record')
+
+    context.user_data['invite_event_id'] = event_text_record[index_record]['id']
+    event_title = event_text_record[index_record]['title']
+
+    text = (
+        f"Выбрано событие: **{event_title}**\n\n"
+        "Пожалуйста, **отправьте Telegram ID** пользователя, которого хотите пригласить:"
+    )
+
+    await query.edit_message_text(
+        text=text,
+        reply_markup=generate_back_to_menu_button(),
+        parse_mode="Markdown"
+    )
+    return TYPING_INVITEE_ID
+
 
 async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Ловит текстовое сообщение с Telegram ID для приглашения на встречу."""

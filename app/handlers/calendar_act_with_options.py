@@ -23,6 +23,7 @@ from app.handlers.calendar_keyboard import (
     generate_edit_fields_keyboard
 )
 from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
+from app.handlers.utils import get_validated_event_index
 
 
 async def show_event_selection_list(query: CallbackQuery, event_text_record: list, action: str) -> int:
@@ -248,34 +249,20 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     Возвращает стейт CONFIRMING_DELETE.
     """
 
-    event_text_record = context.user_data.get('event_text_record', [])
-    event_count = len(event_text_record)
-    user_text = update.message.text.strip()
-
-    if not user_text.isdigit():
-        await update.message.reply_text(
-            f"❌ Ошибка: введите только **число** (цифру).\n"
-            f"Попробуйте еще раз (от 1 до {event_count}):",
-            parse_mode="Markdown"
-        )
-        return TYPING_EVENT_NUMBER_TO_DELETE
-
-    chosen_number = int(user_text)
-    if chosen_number < 1 or chosen_number > event_count:
-        await update.message.reply_text(
-            f"❌ Ошибка: события под номером {chosen_number} не существует.\n"
-            f"Введите число в диапазоне от 1 до {event_count}:"
-        )
-        return TYPING_EVENT_NUMBER_TO_DELETE
-
-    id_event = chosen_number - 1
-    event_rec = event_text_record[id_event]
+    is_valid, result, event_text_record = await get_validated_event_index(
+        update, context, TYPING_EVENT_NUMBER_TO_DELETE
+    )
+    if not is_valid:
+        return result
+    
+    index_record = result
+    event_rec = event_text_record[index_record]
 
     context.user_data['delete_event_id'] = event_rec['id']
     context.user_data['column_name'] = 'id'
 
     selected_date = context.user_data.get('selected_date')
-    delete_text = f"событие № {chosen_number}?", "эту заметку."
+    delete_text = f"событие № {index_record - 1}?", "эту заметку."
 
     event_time = format_event_time(
         event_rec["start_time"], event_rec["end_time"])

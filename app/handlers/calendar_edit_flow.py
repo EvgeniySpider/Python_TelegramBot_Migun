@@ -18,6 +18,7 @@ import re
 from datetime import datetime, date
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.services import CalendarService
+from app.handlers.utils import get_validated_event_index
 
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
@@ -135,39 +136,23 @@ async def handle_edit_event_by_text_number(update: Update, context: ContextTypes
     Логика выбора события по его текстовому номеру в чате (когда задач > 10).
     Валидирует ввод и переводит человеческий номер в индекс ОЗУ.
     """
-    event_text_record = context.user_data.get('event_text_record', [])
-    event_count = len(event_text_record)
-    user_text = update.message.text.strip()
-
-    # 1. Проверяем, что прислали именно число
-    if not user_text.isdigit():
-        await update.message.reply_text(
-            f"❌ Ошибка: введите только **число** (цифру).\n"
-            f"Попробуйте еще раз (от 1 до {event_count}):",
-            parse_mode="Markdown"
-        )
-        return TYPING_EDIT_NUM
-
-    # 2. Проверяем границы диапазона
-    chosen_number = int(user_text)
-    if chosen_number < 1 or chosen_number > event_count:
-        await update.message.reply_text(
-            f"❌ Ошибка: события под номером {chosen_number} не существует.\n"
-            f"Введите число в диапазоне от 1 до {event_count}:"
-        )
-        return TYPING_EDIT_NUM
-
-    # 3. Переводим человеческий шаг в машинный индекс (смещение на -1)
-    index_record = chosen_number - 1
+    is_valid, result, event_text_record = await get_validated_event_index(
+        update, context, TYPING_EDIT_NUM
+    )
+    
+    if not is_valid:
+        return result
+    
+    index_record = result
     event_rec = event_text_record[index_record]
     context.user_data['edit_event_index'] = index_record
     
-    # 4. Фиксируем таргет в ОЗУ для будущих UPDATE-запросов
+    # Фиксируем таргет в ОЗУ для будущих UPDATE-запросов
     context.user_data['edit_event_id'] = event_rec['id']
     context.user_data['current_event_time'] = (event_rec['start_time'],
                                                event_rec['end_time'])
 
-    # 5. Генерируем чистую карточку без номера и выводим меню полей
+    # Генерируем чистую карточку без номера и выводим меню полей
     detailed_text = build_detailed_event_text(
         event_text_record, index=index_record, numbered=False)
 

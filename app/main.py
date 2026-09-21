@@ -1,7 +1,13 @@
+import os
+import django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+django.setup()
+
+from telegram.ext import Application as PTBApplication, ApplicationBuilder
+
 from app.core.stats.repositories import StatsRepository
 from app.core.users.repositories import UserRepository
 from app.core.users.services import UserService
-from telegram.ext import Application as PTBApplication, ApplicationBuilder
 from settings.config import AppSettings
 from app.handlers import HANDLERS
 from app.infra.postgres.db import Database

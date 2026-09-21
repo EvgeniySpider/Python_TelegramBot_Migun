@@ -8,6 +8,14 @@ from app.handlers.utils import get_validated_event_index
 
 
 async def handle_invite_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Обрабатывает выбор события для приглашения через текстовый ввод номера (когда задач > 10).
+    Делегирует проверку ввода и вычисление машинного индекса функции get_validated_event_index.
+    При успешной валидации сохраняет ID выбранного события в ОЗУ (invite_event_id) 
+    и переводит диалог в режим ожидания ввода Telegram ID гостя.
+
+    Возвращает стейт TYPING_INVITEE_ID при успехе, либо стейт повторного ввода при ошибке.
+    """
     # Одной строкой извлекаем и статус, и индекс, и сам массив событий
     is_valid, result, event_text_record = await get_validated_event_index(
         update, context, TYPING_INVITE_NUM
@@ -34,6 +42,13 @@ async def handle_invite_event_by_text_number(update: Update, context: ContextTyp
 
 
 async def handle_invite_event_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Обрабатывает выбор события для приглашения через инлайн-кнопку (когда задач <= 10).
+    Извлекает индекс из callback_data, фиксирует целевой ID события в ОЗУ (invite_event_id)
+    и переводит диалог в режим ожидания ввода Telegram ID гостя.
+    
+    Возвращает стейт TYPING_INVITEE_ID.
+    """
     query = update.callback_query
     await query.answer()
 
@@ -46,8 +61,8 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
     event_title = event_text_record[index_record]['title']
 
     text = (
-        f"Выбрано событие: **{event_title}**\n\n"
-        "Пожалуйста, **отправьте Telegram ID** пользователя, которого хотите пригласить:"
+        f"Выбрано событие: *{event_title}*\n\n"
+        "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
     )
 
     await query.edit_message_text(
@@ -59,8 +74,12 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
 
 
 async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ловит текстовое сообщение с Telegram ID для приглашения на встречу."""
-
+    """
+    Ловит и валидирует текстовое сообщение с Telegram ID для приглашения на встречу.
+    Проверяет корректность ввода (числовой формат, защита от приглашения самого себя) 
+    и наличие привязанного события в сессии. Подготавливает данные для дальнейшей 
+    бизнес-логики (проверка пересечений расписания, запись в БД).
+    """
     # 1. Получаем ввод пользователя
     invitee_id_str = update.message.text.strip()
     inviter_id = update.effective_user.id

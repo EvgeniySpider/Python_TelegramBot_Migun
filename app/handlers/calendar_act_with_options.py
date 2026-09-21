@@ -8,12 +8,16 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_EVENT_TO_DELETE,
     CONFIRMING_DELETE,
+    SELECTING_INVITE_EVENT,
     TYPING_EVENT_NUMBER_TO_DELETE,
     CHOOSING_EDIT_FIELD,
     SELECTING_EDIT_EVENT,
-    TYPING_EDIT_NUM
+    TYPING_EDIT_NUM,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID
 )
 from app.handlers.calendar_keyboard import (
+    generate_back_to_menu_button,
     generate_confirm_keyboard,
     generate_numbered_action_keyboard,
     generate_edit_fields_keyboard
@@ -42,6 +46,13 @@ async def show_event_selection_list(query: CallbackQuery, event_text_record: lis
         prompt_text_input = "Отправьте номер события в чат, чтобы его удалить:\n\n"
         state_inline = CHOOSING_EVENT_TO_DELETE
         state_text = TYPING_EVENT_NUMBER_TO_DELETE
+
+    elif action == 'invite':
+        prefix = "invite_num"
+        prompt_inline = "Выберите номер события для назначения встречи:\n\n"
+        prompt_text_input = "Отправьте номер события в чат, чтобы назначить на него встречу:\n\n"
+        state_inline = SELECTING_INVITE_EVENT
+        state_text = TYPING_INVITE_NUM
 
     # СЦЕНАРИЙ 2: Инлайн-кнопки (от 2 до 10)
     if event_count < 11:
@@ -134,6 +145,33 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
         # Если заметок больше одной — отдаем отрисовку списка помощнику
         return await show_event_selection_list(query, event_text_record, action="delete")
+
+    elif query.data == "action_invite":
+        # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----
+        if event_count == 1:
+            # Фиксируем в ОЗУ ID события, на которое будем приглашать
+            context.user_data['invite_event_id'] = event_text_record[0]['id']
+            
+            # Можно вытащить название для красивого отображения
+            event_title = event_text_record[0]['title']
+
+            text = (
+                f"Выбрано событие: **{event_title}**\n\n"
+                "Пожалуйста, **отправьте Telegram ID** пользователя, которого хотите пригласить:"
+            )
+            
+            # Клавиатуру можно передать пустую или с кнопкой "Назад"
+            await query.edit_message_text(
+                text=text,
+                reply_markup=generate_back_to_menu_button(), # Твоя функция для кнопки назад
+                parse_mode="Markdown"
+            )
+            return TYPING_INVITEE_ID
+
+        # ---- СЦЕНАРИИ 2 и 3: Если заметок больше одной ----
+        return await show_event_selection_list(query, event_text_record, action="invite")
+
+
 
 
 

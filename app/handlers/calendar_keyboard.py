@@ -232,3 +232,11 @@ def generate_edit_fields_keyboard() -> InlineKeyboardMarkup:
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def generate_back_to_menu_button() -> InlineKeyboardMarkup:
+    extra_keyboard = [
+            [InlineKeyboardButton("🔙 Назад", callback_data="cancel_invite")]
+        ]
+
+    return InlineKeyboardMarkup(extra_keyboard)

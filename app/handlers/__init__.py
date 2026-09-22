@@ -10,7 +10,8 @@ from app.handlers.calendar_invite import (
     handle_invite_event_by_text_number,
     handle_invite_event_selection,
     handle_invitee_id_input,
-    handle_invite_response
+    handle_invite_response,
+    handle_show_meetings
 )
 from app.handlers.commands import start, calendar_command
 from app.handlers.calendar_act_with_options import (
@@ -191,6 +192,10 @@ HANDLERS: tuple[BaseHandler, ...] = (
 
     # Главная команда вызова интерактивного календаря текущего месяца
     CommandHandler("calendar", calendar_command),
+
+    # Показывает все встречи пользователя
+    CallbackQueryHandler(handle_show_meetings, pattern=r"^meetings$"),
+    CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^calendar$"),
 
     # Навигационные кнопки календаря: переключение месяцев (<< Вперед / Назад >>)
     # Вынесено из ConversationHandler, так как навигация должна работать всегда, 

@@ -1,8 +1,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.error import TelegramError
+from django.db.models import Q
 
-from app.handlers.calendar_keyboard import generate_back_to_menu_button
+from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_back_to_menu_button
 from app.handlers.commands import calendar_command
 from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID
 from app.handlers.utils import get_validated_event_index
@@ -258,3 +259,84 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
 
         appointment.status = Appointment.Status.CANCELLED
         await appointment.asave()
+
+
+async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    telegram_id = query.from_user.id
+
+    # 1. Забираем ВСЕ встречи за один поход в БД
+    meetings: list[Appointment] = [
+        meeting async for meeting in Appointment.objects.select_related('event').filter(
+            Q(event__user_id=telegram_id) | Q(invitee_id=telegram_id)
+        )
+    ]
+
+    # Встречи, которые назначил Я
+    my_invites = [m for m in meetings if m.event.user_id == telegram_id]
+    # Встречи, на которые пригласили МЕНЯ
+    invites_to_me = [m for m in meetings if m.invitee_id == telegram_id]
+
+    # Маппинг статусов для красивого вывода
+    status_map = {
+        "pending": "⏳ Ожидание",
+        "confirmed": "✅ Подтверждено",
+        "cancelled": "❌ Отменено"
+    }
+
+    # === БЛОК 1: Мои приглашения ===
+    if my_invites:
+        text_my = "*🤝 Назначенные мною встречи:*\n\n"
+        for i, meeting in enumerate(my_invites, 1):
+            event = meeting.event
+            date_str = event.event_date.strftime("%d.%m.%Y")
+            
+            # Проверка на тип события (может не быть start_time, если ALL_DAY)
+            if event.start_time and event.end_time:
+                time_str = f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+            else:
+                time_str = "Весь день"
+                
+            status = status_map.get(meeting.status, meeting.status)
+
+            text_my += (
+                f"*{i}. {event.title}*\n"
+                f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
+                f"👤 Приглашенный: ID {meeting.invitee_id}\n"
+                f"📊 Статус: {status}\n\n"
+            )
+    else:
+        text_my = "*🤝 Назначенные мною встречи:*\nВы никого не приглашали.\n\n"
+
+    # === БЛОК 2: Приглашения для меня ===
+    if invites_to_me:
+        text_others = "*📩 Приглашения для меня:*\n\n"
+        for i, meeting in enumerate(invites_to_me, 1):
+            event = meeting.event
+            date_str = event.event_date.strftime("%d.%m.%Y")
+            
+            if event.start_time and event.end_time:
+                time_str = f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+            else:
+                time_str = "Весь день"
+                
+            status = status_map.get(meeting.status, meeting.status)
+
+            text_others += (
+                f"*{i}. {event.title}*\n"
+                f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
+                f"👑 Организатор: ID {event.user_id}\n"
+                f"📊 Статус: {status}\n\n"
+            )
+    else:
+        text_others = "*📩 Приглашения для меня:*\nВас никто не приглашал.\n"
+
+    # Склеивание результата
+    final_text = f"{text_my}➖➖➖➖➖➖➖➖➖➖\n{text_others}"
+
+
+    await query.edit_message_text(
+        text=final_text,
+        parse_mode="Markdown",
+        reply_markup=generate_back_calendar_button()
+    )

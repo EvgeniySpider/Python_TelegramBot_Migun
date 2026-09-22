@@ -78,6 +78,8 @@ def generate_calendar_keyboard(
         # 3. ДОБАВЛЯЕМ РЯД В КЛАВИАТУРУ (сдвинули влево, теперь он срабатывает 1 раз на неделю!)
         keyboard.append(row)
 
+    keyboard.append([InlineKeyboardButton(text="🤝 Встречи", callback_data="meetings")])
+
     # РЯД 9: Кнопки навигации (Стрелочки)
     # Вычисляем прошлый и следующий месяц для коллбэков стрелочек
     prev_month = month - 1 if month > 1 else 12
@@ -250,3 +252,10 @@ def generate_confirm_invite_keyboard(appointment_id) -> InlineKeyboardMarkup:
             ]
         ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def generate_back_calendar_button() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в календарь", callback_data="calendar")]
+    ])
+    

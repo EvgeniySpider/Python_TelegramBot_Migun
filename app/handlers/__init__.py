@@ -6,7 +6,12 @@ from telegram.ext import (
     ConversationHandler, 
     filters
 )
-from app.handlers.calendar_invite import handle_invite_event_by_text_number, handle_invite_event_selection, handle_invitee_id_input
+from app.handlers.calendar_invite import (
+    handle_invite_event_by_text_number,
+    handle_invite_event_selection,
+    handle_invitee_id_input,
+    handle_invite_response
+)
 from app.handlers.commands import start, calendar_command
 from app.handlers.calendar_act_with_options import (
     handle_options_click,
@@ -183,12 +188,19 @@ calendar_conversation = ConversationHandler(
 HANDLERS: tuple[BaseHandler, ...] = (
     # Первичная инициализация пользователя при первом запуске бота
     CommandHandler("start", start),
+
     # Главная команда вызова интерактивного календаря текущего месяца
     CommandHandler("calendar", calendar_command),
+
     # Навигационные кнопки календаря: переключение месяцев (<< Вперед / Назад >>)
     # Вынесено из ConversationHandler, так как навигация должна работать всегда, 
     # независимо от того, находится ли юзер внутри процесса создания/удаления заметок
-    CallbackQueryHandler(handle_calendar_nav_click, pattern=r"^calendar_nav:"), 
+    CallbackQueryHandler(handle_calendar_nav_click, pattern=r"^calendar_nav:"),
+
+    # Глобальный обработчик входящих приглашений (Принять / Отклонить)
+    # Работает всегда и везде, вытаскивает callback_data по паттерну
+    CallbackQueryHandler(handle_invite_response, pattern=r"^invite:(accept|reject):"),
+
     # Подключение основной машины состояний
     calendar_conversation,
 )

@@ -240,3 +240,13 @@ def generate_back_to_menu_button() -> InlineKeyboardMarkup:
         ]
 
     return InlineKeyboardMarkup(extra_keyboard)
+
+
+def generate_confirm_invite_keyboard(appointment_id) -> InlineKeyboardMarkup:
+    keyboard = [
+            [
+                InlineKeyboardButton("✅ Принять", callback_data=f"invite:accept:{appointment_id}"),
+                InlineKeyboardButton("❌ Отклонить", callback_data=f"invite:reject:{appointment_id}")
+            ]
+        ]
+    return InlineKeyboardMarkup(keyboard)

@@ -56,9 +56,9 @@ class Appointment(models.Model):
     """Модель приглашения на встречу (связывает Событие и Участника)."""
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Ожидание"
-        CONFIRMED = "confirmed", "Подтверждено"
-        CANCELLED = "cancelled", "Отменено"
+        PENDING = "pending", "⏳ Ожидание"
+        CONFIRMED = "confirmed", "✅ Подтверждено"
+        CANCELLED = "cancelled", "❌ Отменено"
 
     # Событие (в нем уже лежат дата, время и организатор - event.user)
     event = models.ForeignKey(

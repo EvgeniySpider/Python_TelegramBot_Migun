@@ -200,9 +200,10 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     inviter_id = appointment.event.user_id
+    original_event = appointment.event
 
     if action == 'accept':
-        # Повторная валидация времени гостя (вдруг он занял его, пока думал)
+        # 1. Повторная валидация времени гостя
         is_busy = await check_user_availability(query.from_user.id, appointment.event)
         
         if is_busy:
@@ -211,36 +212,49 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Всё ок, подтверждаем
+        # 2. Подтверждаем встречу в промежуточной таблице
         appointment.status = Appointment.Status.CONFIRMED
         await appointment.asave()
+        
+        guest_description = f"🤝 Встреча с пользователем {inviter_id}.\n"
+        if original_event.description:
+            guest_description += f"\nОригинальное описание: {original_event.description}"
 
-        # Меняем сообщение у гостя (кнопки пропадают)
+        # 3. Создаем физическую копию
+        await Event.objects.acreate(
+            user_id=query.from_user.id,
+            event_type=original_event.event_type,
+            title=f"Встреча: {original_event.title}",
+            description=guest_description,
+            event_date=original_event.event_date,
+            start_time=original_event.start_time,
+            end_time=original_event.end_time
+        )
+
+        # 4. Меняем сообщение у гостя
         await query.edit_message_text(
-            f"✅ Вы *приняли* приглашение на событие: {appointment.event.title}",
+            f"✅ Вы *приняли* приглашение на событие: {original_event.title}",
             parse_mode="Markdown"
         )
 
-        # Уведомляем организатора
+        # 5. Уведомляем организатора
         await context.bot.send_message(
             chat_id=inviter_id,
-            text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{appointment.event.title}*.",
+            text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{original_event.title}*.",
             parse_mode="Markdown"
         )
 
     elif action == 'reject':
-        # Отклоняем
-        appointment.status = Appointment.Status.CANCELLED
-        await appointment.asave()
-
         await query.edit_message_text(
-            f"❌ Вы *отклонили* приглашение на событие: {appointment.event.title}",
+            f"❌ Вы *отказались* от приглашения на событие: {original_event.title}",
             parse_mode="Markdown"
         )
 
-        # Уведомляем организатора
         await context.bot.send_message(
             chat_id=inviter_id,
-            text=f"❌ Пользователь *{query.from_user.id}* отклонил ваше приглашение на событие *{appointment.event.title}*.",
+            text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{original_event.title}*.",
             parse_mode="Markdown"
         )
+
+        appointment.status = Appointment.Status.CANCELLED
+        await appointment.asave()

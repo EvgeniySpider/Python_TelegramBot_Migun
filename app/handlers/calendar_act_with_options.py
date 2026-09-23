@@ -23,7 +23,7 @@ from app.handlers.calendar_keyboard import (
     generate_edit_fields_keyboard
 )
 from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
-from app.handlers.utils import get_validated_event_index
+from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
 
 
 async def show_event_selection_list(query: CallbackQuery, event_text_record: list, action: str) -> int:
@@ -108,12 +108,29 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         return state
 
     elif query.data == "action_edit":
-        # Уникальная логика, если заметка всего одна
         if event_count == 1:
+            event_rec = event_text_record[0]
+            selected_date = context.user_data.get('selected_date')
+            user_id = update.effective_user.id
+            
+            is_invitee = await is_user_invitee_for_event(
+                user_id=user_id,
+                selected_date=selected_date,
+                start_time=event_rec['start_time'],
+                end_time=event_rec['end_time']
+            )
+
+            if is_invitee:
+                await query.answer(
+                    "❌ Редактировать встречу может только организатор. Вы можете только удалить её (отменить участие).", 
+                    show_alert=False
+                )
+                return CHOOSING_ACTION
+
             detailed_event_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
             
-            context.user_data['current_event_time'] = (event_text_record[0]['start_time'], event_text_record[0]['end_time'])
-            context.user_data['edit_event_id'] = event_text_record[0]['id']
+            context.user_data['current_event_time'] = (event_rec['start_time'], event_rec['end_time'])
+            context.user_data['edit_event_id'] = event_rec['id']
             context.user_data['edit_event_index'] = 0
 
             text = f"У вас 1 заметка. Выберите опцию, чтобы отредактировать её\n\n{detailed_event_text}"
@@ -124,28 +141,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return CHOOSING_EDIT_FIELD
 
-        # Если заметок больше одной — отдаем отрисовку списка помощнику
         return await show_event_selection_list(query, event_text_record, action="edit")
-
-    elif query.data == "action_delete":
-        # Уникальная логика, если заметка всего одна (например, сразу кнопки Да/Нет)
-        if event_count == 1:
-            event_rec = event_text_record[0]
-
-            context.user_data['delete_event_id'] = event_rec['id']
-            context.user_data['column_name'] = 'id'
-
-            first_sent = 'мероприятие на весь день?' if event_rec[
-                'event_type'] == 'all_day' else 'мероприятие?'
-            delete_text = first_sent, 'заметку.'
-            event = f'📌 *Событие*: {event_rec["title"]}\n'
-
-            state = await confirm_to_delete(query, event, selected_date, delete_text)
-            return state
-
-
-        # Если заметок больше одной — отдаем отрисовку списка помощнику
-        return await show_event_selection_list(query, event_text_record, action="delete")
 
     elif query.data == "action_invite":
         # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----

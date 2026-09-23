@@ -1,5 +1,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+import datetime
+from typing import Optional
+
+from events.models import Appointment
 
 
 async def get_validated_event_index(
@@ -34,3 +38,24 @@ async def get_validated_event_index(
         return False, error_state, []
 
     return True, chosen_number - 1, event_text_record
+
+
+
+
+async def is_user_invitee_for_event(
+    user_id: int,
+    selected_date: datetime.date,
+    start_time: Optional[datetime.time],
+    end_time: Optional[datetime.time]
+) -> bool:
+    """
+    Проверяет, является ли пользователь приглашенным на мероприятие (ребенком),
+    сопоставляя дату и время события организатора.
+    """
+
+    return await Appointment.objects.filter(
+        invitee_id=user_id,
+        event__event_date=selected_date,
+        event__start_time=start_time,
+        event__end_time=end_time
+    ).aexists()

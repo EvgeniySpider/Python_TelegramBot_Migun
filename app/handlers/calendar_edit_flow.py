@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from app.handlers.states import (
     CHOOSING_EDIT_FIELD,
+    SELECTING_EDIT_EVENT,
     TYPING_EDIT_TITLE,
     TYPING_EDIT_DESC,
     TYPING_EDIT_NUM,
@@ -18,7 +19,7 @@ import re
 from datetime import datetime, date
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.services import CalendarService
-from app.handlers.utils import get_validated_event_index
+from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
 
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
@@ -113,18 +114,34 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
     index_record = int(query.data.split(':')[1])
     event_text_record = context.user_data.get('event_text_record')
     event_rec = event_text_record[index_record]
-    context.user_data['edit_event_index'] = index_record
+    selected_date = context.user_data.get('selected_date')
+    user_id = update.effective_user.id
+    
+    
+    is_invitee = await is_user_invitee_for_event(
+        user_id=user_id,
+        selected_date=selected_date,
+        start_time=event_rec['start_time'],
+        end_time=event_rec['end_time']
+    )
 
-    context.user_data['current_event_time'] = (event_rec['start_time'],
-                                               event_rec['end_time'])
+    if is_invitee:
+        await query.answer(
+            "❌ Редактировать встречу может только организатор. Выберите другое событие.", 
+            show_alert=False
+        )
+        return SELECTING_EDIT_EVENT
+
+    context.user_data['edit_event_index'] = index_record
+    context.user_data['current_event_time'] = (event_rec['start_time'], event_rec['end_time'])
     context.user_data['edit_event_id'] = event_rec['id']
+    
     detailed_event_text = build_detailed_event_text(
         event_text_record, index=index_record, numbered=False)
 
     await query.edit_message_text(
         text='Ваша заметка, которую вы собираетесь менять:\n\n'
         f'{detailed_event_text}',
-        # Кнопки: Название, Время, Описание, Дата
         reply_markup=generate_edit_fields_keyboard(),
         parse_mode="Markdown"
     )
@@ -132,10 +149,6 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
 
 
 async def handle_edit_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Логика выбора события по его текстовому номеру в чате (когда задач > 10).
-    Валидирует ввод и переводит человеческий номер в индекс ОЗУ.
-    """
     is_valid, result, event_text_record = await get_validated_event_index(
         update, context, TYPING_EDIT_NUM
     )
@@ -145,14 +158,27 @@ async def handle_edit_event_by_text_number(update: Update, context: ContextTypes
     
     index_record = result
     event_rec = event_text_record[index_record]
-    context.user_data['edit_event_index'] = index_record
+    selected_date = context.user_data.get('selected_date')
+    user_id = update.effective_user.id
     
-    # Фиксируем таргет в ОЗУ для будущих UPDATE-запросов
-    context.user_data['edit_event_id'] = event_rec['id']
-    context.user_data['current_event_time'] = (event_rec['start_time'],
-                                               event_rec['end_time'])
+    is_invitee = await is_user_invitee_for_event(
+        user_id=user_id,
+        selected_date=selected_date,
+        start_time=event_rec['start_time'],
+        end_time=event_rec['end_time']
+    )
 
-    # Генерируем чистую карточку без номера и выводим меню полей
+    if is_invitee:
+        await update.message.reply_text(
+            "❌ Редактировать встречу может только организатор.\n\n"
+            "Пожалуйста, отправьте номер другого события для редактирования:"
+        )
+        return TYPING_EDIT_NUM
+
+    context.user_data['edit_event_index'] = index_record
+    context.user_data['edit_event_id'] = event_rec['id']
+    context.user_data['current_event_time'] = (event_rec['start_time'], event_rec['end_time'])
+
     detailed_text = build_detailed_event_text(
         event_text_record, index=index_record, numbered=False)
 

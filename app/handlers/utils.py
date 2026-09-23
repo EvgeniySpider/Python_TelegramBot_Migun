@@ -65,53 +65,78 @@ async def is_user_invitee_for_event(
 
 async def notify_and_cancel_appointments(user_id: int, column_name: str, value: Any, bot: ExtBot) -> None:
     """
-    Ищет удаляемые события пользователя. Если среди них есть встречи 
-    (где юзер - приглашенный), отменяет их и уведомляет организаторов.
+    Ищет удаляемые события пользователя и обрабатывает связанные встречи:
+    - Если юзер организатор -> удаляет приглашения и копии у детей, уведомляет детей.
+    - Если юзер ребенок -> удаляет свое приглашение, уведомляет организатора.
     """
-
-    # 1. Находим локальные копии событий, которые вот-вот будут удалены
     if column_name == 'id':
         events_to_delete = Event.objects.filter(id=value, user_id=user_id)
     elif column_name == 'event_date':
         events_to_delete = Event.objects.filter(event_date=value, user_id=user_id)
     else:
         return
-    #print('Событие на удаление:',events_to_delete)
-    # 2. Перебираем их
+    
     async for local_event in events_to_delete:
-        # Ищем связь в таблице appointments, подтягивая данные события организатора (select_related)
-        appointment = await Appointment.objects.select_related('event').filter(
+        date_str = local_event.event_date.strftime("%d.%m.%Y")
+        time_str = f"{local_event.start_time.strftime('%H:%M')} - {local_event.end_time.strftime('%H:%M')}" if local_event.start_time else "Весь день"
+
+        # ==========================================
+        # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
+        # ==========================================
+        # Ищем все встречи, привязанные к этому конкретному событию
+        hosted_appointments = Appointment.objects.filter(event_id=local_event.id)
+        
+        # Если такие есть, значит мы удаляем оригинал
+        async for appt in hosted_appointments:
+            invitee_id = appt.invitee_id
+            
+            # Находим и удаляем локальную копию в календаре ребенка.
+            # aexists/afirst не нужны, метод adelete() на QuerySet удалит всё сам одним SQL-запросом
+            await Event.objects.filter(
+                user_id=invitee_id,
+                event_date=local_event.event_date,
+                start_time=local_event.start_time,
+                end_time=local_event.end_time
+            ).adelete()
+            
+            # Удаляем саму запись о встрече
+            await appt.adelete()
+            
+            msg = (
+                f"❌ *Отмена встречи*\n\n"
+                f"Организатор (ID: `{user_id}`) отменил мероприятие:\n"
+                f"📌 *Событие*: {local_event.title}\n"
+                f"📅 *Дата*: {date_str}\n"
+                f"⏰ *Время*: {time_str}"
+            )
+            try:
+                await bot.send_message(chat_id=invitee_id, text=msg, parse_mode="Markdown")
+            except Exception as e:
+                print(f"Ошибка отправки уведомления приглашённому {invitee_id}: {e}")
+
+        # ==========================================
+        # СЦЕНАРИЙ Б: Пользователь — РЕБЕНОК (приглашенный)
+        # ==========================================
+        appt_as_invitee = await Appointment.objects.select_related('event').filter(
             invitee_id=user_id,
             event__event_date=local_event.event_date,
             event__start_time=local_event.start_time,
             event__end_time=local_event.end_time
         ).afirst()
 
-        # Если это действительно приглашение и оно еще не отменено
-        if appointment and appointment.status != Appointment.Status.CANCELLED:
-
-            # Формируем данные для уведомления
-            organizer_id = appointment.event.user_id
-            date_str = local_event.event_date.strftime("%d.%m.%Y")
-            
-            if local_event.start_time and local_event.end_time:
-                time_str = f"{local_event.start_time.strftime('%H:%M')} - {local_event.end_time.strftime('%H:%M')}"
-            else:
-                time_str = "Весь день"
-
+        if appt_as_invitee and appt_as_invitee.status != Appointment.Status.CANCELLED:
+            organizer_id = appt_as_invitee.event.user_id
             msg = (
                 f"❌ *Отмена участия*\n\n"
-                f"Пользователь (ID: `{user_id}`) удалил событие и отменил свое участие:\n"
-                f"📌 *Событие*: {appointment.event.title}\n"
+                f"Пользователь (ID: `{user_id}`) отменил свое участие:\n"
+                f"📌 *Событие*: {appt_as_invitee.event.title}\n"
                 f"📅 *Дата*: {date_str}\n"
                 f"⏰ *Время*: {time_str}"
             )
-            
-            # Полностью удаляем строку из БД (без последующего сохранения)
-            await appointment.adelete()
-
-            # Отправляем сообщение организатору
+            await appt_as_invitee.adelete()
             try:
                 await bot.send_message(chat_id=organizer_id, text=msg, parse_mode="Markdown")
             except Exception as e:
                 print(f"Ошибка отправки уведомления организатору {organizer_id}: {e}")
+
+

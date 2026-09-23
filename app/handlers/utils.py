@@ -89,10 +89,6 @@ async def notify_and_cancel_appointments(user_id: int, column_name: str, value: 
 
         # Если это действительно приглашение и оно еще не отменено
         if appointment and appointment.status != Appointment.Status.CANCELLED:
-            
-            # Меняем статус через ORM
-            appointment.status = Appointment.Status.CANCELLED
-            await appointment.asave(update_fields=['status'])
 
             # Формируем данные для уведомления
             organizer_id = appointment.event.user_id
@@ -102,7 +98,7 @@ async def notify_and_cancel_appointments(user_id: int, column_name: str, value: 
                 time_str = f"{local_event.start_time.strftime('%H:%M')} - {local_event.end_time.strftime('%H:%M')}"
             else:
                 time_str = "Весь день"
-            
+
             msg = (
                 f"❌ *Отмена участия*\n\n"
                 f"Пользователь (ID: `{user_id}`) удалил событие и отменил свое участие:\n"
@@ -111,6 +107,9 @@ async def notify_and_cancel_appointments(user_id: int, column_name: str, value: 
                 f"⏰ *Время*: {time_str}"
             )
             
+            # Полностью удаляем строку из БД (без последующего сохранения)
+            await appointment.adelete()
+
             # Отправляем сообщение организатору
             try:
                 await bot.send_message(chat_id=organizer_id, text=msg, parse_mode="Markdown")

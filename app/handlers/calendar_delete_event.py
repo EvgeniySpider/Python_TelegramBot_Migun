@@ -4,43 +4,32 @@ from app.handlers.commands import calendar_command
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_act_with_options import confirm_to_delete, handle_back_to_day_menu_click
 from app.core.calendar.utils import format_event_time, build_events_list_text
+from app.handlers.utils import notify_and_cancel_appointments
 
 
 async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Главный диспетчер финального экрана подтверждения удаления (стейт CONFIRMING_DELETE).
-    Разводит логику в зависимости от итогового вердикта пользователя.
-
-    Варианты разветвления:
-    1. Клик по кнопке "Да, удалить" ('confirm_delete_yes'):
-       - Считывает параметры фильтрации из ОЗУ ('delete_event_id' и 'column_name').
-       - Передаёт их в корутину del_event_on_info для физического удаления строк из PostgreSQL.
-       - Вызывает деструктор prepare_after_delete для зачистки памяти и сброса стейта.
-
-    2. Клик по кнопке "Нет, назад" (любые другие callback-данные):
-       - Безопасно вычищает точечный таргет 'delete_event_id' из ОЗУ.
-       - Извлекает нетронутый первоисточник 'event_text_record' и генерирует из него
-         чистый список расписания дня через утилиту build_events_list_text.
-       - Возвращает пользователя в главное меню управления днем (handle_options_with_exist_notes_in_day).
-
-    Returns:
-        int: Либо ConversationHandler.END (при удалении), либо CHOOSING_ACTION (при возврате назад).
-    """
-
     query = update.callback_query
 
     # Если пользователь нажал "Да, удалить"
     if query.data == "confirm_delete_yes":
-        event_id = context.user_data.get('delete_event_id')
+        # Значение может быть как int (id), так и datetime.date (event_date)
+        event_value = context.user_data.get('delete_event_id') 
         column_name = context.user_data.get('column_name', 'id')
+        user_id = update.effective_user.id
 
-        await del_event_on_info(context, column_name, event_id)
+        # 1. Сначала отменяем встречи и уведомляем организаторов
+        await notify_and_cancel_appointments(user_id, column_name, event_value, context.bot)
+
+        # 2. Физически удаляем записи из БД
+        await del_event_on_info(context, column_name, event_value)
+        
         state = await prepare_after_delete(update, context, query)
         return state
 
     # Если пользователь нажал "Нет, назад"
     else:
         context.user_data.pop('delete_event_id', None)
+        context.user_data.pop('column_name', None) # На всякий случай чистим и колонку
         state = await handle_back_to_day_menu_click(update, context)
         return state
 

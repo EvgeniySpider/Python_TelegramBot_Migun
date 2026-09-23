@@ -91,7 +91,7 @@ class CalendarRepository:
         conn: asyncpg.Connection,
         column_name: str,  # Сюда передаем строго строку "id" или "event_date"
         # Сюда передаем конкретный int (ID) или datetime.date
-        value
+        value: int | datetime.datetime
     ):
         # Валидация для защиты от SQL-инъекций (перфекционизм и безопасность!)
         if column_name not in ('id', 'event_date'):

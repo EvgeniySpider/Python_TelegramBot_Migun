@@ -167,8 +167,25 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # ---- СЦЕНАРИИ 2 и 3: Если заметок больше одной ----
         return await show_event_selection_list(query, event_text_record, action="invite")
 
+    elif query.data == "action_delete":
+        # Уникальная логика, если заметка всего одна (например, сразу кнопки Да/Нет)
+        if event_count == 1:
+            event_rec = event_text_record[0]
+
+            context.user_data['delete_event_id'] = event_rec['id']
+            context.user_data['column_name'] = 'id'
+
+            first_sent = 'мероприятие на весь день?' if event_rec[
+                'event_type'] == 'all_day' else 'мероприятие?'
+            delete_text = first_sent, 'заметку.'
+            event = f'📌 *Событие*: {event_rec["title"]}\n'
+
+            state = await confirm_to_delete(query, event, selected_date, delete_text)
+            return state
 
 
+        # Если заметок больше одной — отдаем отрисовку списка помощнику
+        return await show_event_selection_list(query, event_text_record, action="delete")
 
 
 async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

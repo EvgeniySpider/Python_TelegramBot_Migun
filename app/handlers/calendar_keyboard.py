@@ -169,40 +169,40 @@ def generate_confirm_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-def generate_numbered_events_keyboard(count: int = None) -> InlineKeyboardMarkup:
-    # 1. Базовая заготовка под цифровые ряды
-    keyboard = [[], []]
+# def generate_numbered_events_keyboard(count: int = None) -> InlineKeyboardMarkup:
+#     # 1. Базовая заготовка под цифровые ряды
+#     keyboard = [[], []]
 
-    # 2. Если count передан (сценарий до 10 событий включительно), наполняем цифрами
-    if count is not None:
-        for c in range(count):
-            button = InlineKeyboardButton(
-                f"{c+1}", callback_data=f"del_num:{c}")
-            if c < 5:
-                keyboard[0].append(button)
-            else:
-                keyboard[1].append(button)
+#     # 2. Если count передан (сценарий до 10 событий включительно), наполняем цифрами
+#     if count is not None:
+#         for c in range(count):
+#             button = InlineKeyboardButton(
+#                 f"{c+1}", callback_data=f"del_num:{c}")
+#             if c < 5:
+#                 keyboard[0].append(button)
+#             else:
+#                 keyboard[1].append(button)
 
-    # 3. Сервисные кнопки, которые нужны ВСЕГДА (и для кнопочного, и для текстового режима)
-    extra_keyboard = [
-        [
-            InlineKeyboardButton("❌ Удалить все события",
-                                 callback_data="del_num:everything"),
-            InlineKeyboardButton("🔙  Назад", callback_data="del_num:cancel")
-        ]
-    ]
+#     # 3. Сервисные кнопки, которые нужны ВСЕГДА (и для кнопочного, и для текстового режима)
+#     extra_keyboard = [
+#         [
+#             InlineKeyboardButton("❌ Удалить все события",
+#                                  callback_data="del_num:everything"),
+#             InlineKeyboardButton("🔙  Назад", callback_data="del_num:cancel")
+#         ]
+#     ]
 
-    # Расширяем клавиатуру (если цифр не было, списки keyboard[0] и [1] останутся пустыми и не отобразятся)
-    keyboard.extend(extra_keyboard)
+#     # Расширяем клавиатуру (если цифр не было, списки keyboard[0] и [1] останутся пустыми и не отобразятся)
+#     keyboard.extend(extra_keyboard)
 
-    return InlineKeyboardMarkup(keyboard)
+#     return InlineKeyboardMarkup(keyboard)
 
 
 def generate_numbered_action_keyboard(count: int = None, prefix: str = "edit_num") -> InlineKeyboardMarkup:
-    """Генерирует клавиатуру с номерами задач для РЕДАКТИРОВАНИЯ или ПРИГЛАШЕНИЯ."""
+    """Генерирует клавиатуру с номерами задач для РЕДАКТИРОВАНИЯ, УДАЛЕНИЯ или ПРИГЛАШЕНИЯ."""
     keyboard = [[], []]
 
-    # Наполняем цифрами 1, 2, 3...
+    # 1. Наполняем цифрами 1, 2, 3...
     if count is not None:
         for c in range(count):
             button = InlineKeyboardButton(f"{c+1}", callback_data=f"{prefix}:{c}")
@@ -211,11 +211,23 @@ def generate_numbered_action_keyboard(count: int = None, prefix: str = "edit_num
             else:
                 keyboard[1].append(button)
 
-    # Сервисная кнопка возврата в меню дня
-    extra_keyboard = [
-        [InlineKeyboardButton("🔙 Назад", callback_data=f"{prefix}:cancel")]
-    ]
-    keyboard.extend(extra_keyboard)
+    # 2. Формируем нижний (сервисный) ряд кнопок
+    bottom_row = []
+
+    # Если это режим удаления — добавляем кнопку "Удалить всё" первой (слева)
+    if prefix == 'del_num':
+        bottom_row.append(
+            InlineKeyboardButton("❌ Удалить всё", callback_data="del_num:everything")
+        )
+        
+    # Кнопка возврата нужна всегда (она будет либо единственной)
+    bottom_row.append(
+        InlineKeyboardButton("🔙 Назад", callback_data=f"{prefix}:cancel")
+    )
+
+    # 3. Присоединяем сформированный ряд к общей клавиатуре
+    keyboard.append(bottom_row)
+
     return InlineKeyboardMarkup(keyboard)
 
 

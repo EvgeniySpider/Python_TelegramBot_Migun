@@ -6,11 +6,12 @@ from django.db.models import Q
 from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_back_to_menu_button
 from app.handlers.commands import calendar_command
 from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
-from app.handlers.utils import get_validated_event_index
+from app.handlers.utils import get_validated_event_index, validate_telegram_id_input
 from events.models import User, Event, Appointment
 from app.core.calendar.services import check_user_availability
 from app.handlers.calendar_keyboard import generate_confirm_invite_keyboard
-from app.core.calendar.utils import build_detailed_event_text, format_event_time
+from app.core.calendar.utils import build_detailed_event_text
+
 
 
 async def handle_invite_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -84,23 +85,23 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     Ловит и валидирует Telegram ID. Проверяет наличие пользователя в БД и его 
     занятость. При успехе создает приглашение со статусом PENDING.
     """
-    invitee_id_str = update.message.text.strip()
-    inviter_id = update.effective_user.id
+    # Вызываем утилиту валидации
+    is_valid, validation_result = validate_telegram_id_input(
+        input_text=update.message.text,
+        current_user_id=update.effective_user.id,
+        self_error_msg="❌ Вы не можете пригласить самого себя. Введите ID другого пользователя:"
+    )
+
+    if not is_valid:
+        await update.message.reply_text(validation_result)
+        return TYPING_INVITEE_ID
+        
+    invitee_id = validation_result
     
     event_id = context.user_data.get('invite_event_id')
     if not event_id:
         await update.message.reply_text("⚠️ Сессия устарела. Возвращаю вас в календарь.")
         return await calendar_command(update, context) 
-
-    if not invitee_id_str.isdigit():
-        await update.message.reply_text("❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:")
-        return TYPING_INVITEE_ID
-
-    invitee_id = int(invitee_id_str)
-    
-    if inviter_id == invitee_id:
-        await update.message.reply_text("❌ Вы не можете пригласить самого себя. Введите ID другого пользователя:")
-        return TYPING_INVITEE_ID
 
     # 1. Проверяем, существует ли пользователь в базе (Django ORM)
     user_exists = await User.objects.filter(telegram_id=invitee_id).aexists()
@@ -114,9 +115,9 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
 
     # 2. Достаем целевое событие
     target_event = await Event.objects.aget(id=event_id)
+    
     # 3. Валидация пересечения временных интервалов
     is_busy = await check_user_availability(invitee_id, target_event)
-    
     
     if is_busy:
         await update.message.reply_text(
@@ -125,10 +126,9 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode="Markdown"
         )
         context.user_data.pop('invite_event_id', None)
-        return await calendar_command(update, context) # Возвращаем в календарь при неудаче
+        return await calendar_command(update, context)
 
     # 4. Если свободен — создаем запись в таблице appointments
-    # get_or_create защищает от дублирования приглашения на одно и то же событие
     appointment, created = await Appointment.objects.aget_or_create(
         event_id=target_event.id,
         invitee_id=invitee_id,
@@ -138,8 +138,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     if not created:
         await update.message.reply_text("ℹ️ Вы уже отправляли приглашение этому пользователю на данное событие.")
     else:
-        # Собираем красивый текст для гостя
-        inviter_name = update.effective_user.first_name or f"Пользователь {inviter_id}"
+        inviter_name = update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
         invite_text = (
             f"🔔 *Новое приглашение!*\n\n"
             f"*{inviter_name}* приглашает вас на событие:\n"
@@ -147,31 +146,26 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
             f"📅 Дата: {target_event.event_date}\n"
         )
         if target_event.start_time:
-            # Если есть время, отсекаем секунды
             invite_text += f"⏰ Время: {target_event.start_time.strftime('%H:%M')}\n"
         
         invite_text += "\nПримете приглашение?"
 
         try:
-            # Отправляем сообщение ГОСТЮ
             await context.bot.send_message(
                 chat_id=invitee_id,
                 text=invite_text,
                 reply_markup=generate_confirm_invite_keyboard(appointment.id),
                 parse_mode="Markdown"
             )
-            # Отвечаем ОРГАНИЗАТОРУ
             await update.message.reply_text(
                 f"✅ Приглашение успешно создано!\n"
                 f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
                 parse_mode="Markdown"
             )
         except TelegramError:
-            # Если гость заблокировал бота или не начинал с ним диалог
             await update.message.reply_text(
                 "⚠️ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал."
             )
-            # Удаляем "зависшее" приглашение
             await appointment.adelete()
     
     context.user_data.pop('invite_event_id', None)
@@ -350,18 +344,18 @@ async def handle_ask_telegram_id_for_public_events(update: Update, context: Cont
 
 
 async def handle_show_public_events_another_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    telegram_id_another_user = update.message.text.strip()
-    our_telegram_id = update.effective_user.id
-    
-    if not telegram_id_another_user.isdigit():
-        await update.message.reply_text("❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:")
-        return TYPING_PUBLIC_EVENTS_USER_ID
+    # Вызываем утилиту валидации
+    is_valid, validation_result = validate_telegram_id_input(
+        input_text=update.message.text,
+        current_user_id=update.effective_user.id,
+        self_error_msg="❌ В этом меню не можете смотреть свои заметки. Введите ID другого пользователя:"
+    )
 
-    telegram_id_another_user = int(telegram_id_another_user)
-    
-    if telegram_id_another_user == our_telegram_id:
-        await update.message.reply_text("❌ В этом меню не можете смотреть свои заметки. Введите ID другого пользователя:")
+    if not is_valid:
+        await update.message.reply_text(validation_result)
         return TYPING_PUBLIC_EVENTS_USER_ID
+        
+    telegram_id_another_user = validation_result
 
     public_events = Event.objects.filter(
         user_id=telegram_id_another_user,
@@ -375,7 +369,6 @@ async def handle_show_public_events_another_user(update: Update, context: Contex
         )
         return TYPING_PUBLIC_EVENTS_USER_ID
 
-    # Собираем объекты Django ORM в список словарей для функции-генератора
     events_dicts = [
         {
             'title': event.title,
@@ -390,7 +383,6 @@ async def handle_show_public_events_another_user(update: Update, context: Contex
     
     text_blocks = [f"🌐 *Публичные события пользователя {telegram_id_another_user}:*\n"]
     
-    # Прогоняем каждый словарь через готовую утилиту
     for idx in range(len(events_dicts)):
         text_blocks.append(build_detailed_event_text(events_dicts, index=idx, numbered=True, is_show_date=True))
 

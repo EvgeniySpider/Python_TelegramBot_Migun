@@ -42,8 +42,6 @@ async def get_validated_event_index(
     return True, chosen_number - 1, event_text_record
 
 
-
-
 async def is_user_invitee_for_event(
     user_id: int,
     selected_date: datetime.date,
@@ -140,3 +138,19 @@ async def notify_and_cancel_appointments(user_id: int, column_name: str, value: 
                 print(f"Ошибка отправки уведомления организатору {organizer_id}: {e}")
 
 
+def validate_telegram_id_input(input_text: str, current_user_id: int, self_error_msg: str) -> tuple[bool, int | str]:
+    """
+    Проверяет введенный текст на соответствие формату Telegram ID и предотвращает ввод собственного ID.
+    Возвращает (True, telegram_id) при успехе, либо (False, текст_ошибки) при неудаче.
+    """
+    cleaned_text = input_text.strip()
+
+    if not cleaned_text.isdigit():
+        return False, "❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:"
+
+    target_id = int(cleaned_text)
+
+    if target_id == current_user_id:
+        return False, self_error_msg
+
+    return True, target_id

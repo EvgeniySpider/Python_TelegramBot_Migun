@@ -1,7 +1,6 @@
 from asyncpg import Record
 from typing import Union, List
 from datetime import time
-from collections import deque
 
 
 def format_event_time(start_time: time, end_time: time) -> str:

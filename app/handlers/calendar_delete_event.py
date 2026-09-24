@@ -21,7 +21,7 @@ async def handle_delete_confirmation(update: Update, context: ContextTypes.DEFAU
         await notify_and_cancel_appointments(user_id, column_name, event_value, context.bot)
 
         # 2. Физически удаляем записи из БД
-        await del_event_on_info(context, column_name, event_value)
+        await del_event_on_info(context, update, column_name, event_value)
         
         state = await prepare_after_delete(update, context, query)
         return state
@@ -59,7 +59,7 @@ async def prepare_after_delete(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
-async def del_event_on_info(context: ContextTypes.DEFAULT_TYPE, column_name: str, value) -> None:
+async def del_event_on_info(context: ContextTypes.DEFAULT_TYPE, update: Update, column_name: str, value) -> None:
     """
     Интерфейс низкоуровневого взаимодействия с СУБД для удаления записей.
     Унифицирует обращения к репозиторию, изолируя контекст транзакции.
@@ -81,6 +81,9 @@ async def del_event_on_info(context: ContextTypes.DEFAULT_TYPE, column_name: str
     if deleted_count > 0:
         await context.application.stats_repository.increment_metric(
             'events_deleted', amount=deleted_count
+        )
+        await context.application.stats_repository.increment_user_metric(
+            update.effective_user.id, 'events_cancelled', deleted_count
         )
 
 

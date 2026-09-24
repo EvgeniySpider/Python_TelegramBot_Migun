@@ -268,6 +268,9 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if metric_name:
         await context.application.stats_repository.increment_metric(metric_name)
 
+    await context.application.stats_repository.increment_user_metric(
+        user_id, 'events_created'
+    )
 
     if event_type == 'all_day':
         duration_text = 'Весь день'

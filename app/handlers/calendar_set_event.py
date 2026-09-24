@@ -252,10 +252,10 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     async with context.application.database.connection() as conn:
         await conn.execute(
             """
-            INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, created_at, description)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO events (user_id, event_type, title, event_date, start_time, end_time, created_at, description, is_public)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
-            user_id, event_type, event_title, selected_date, start_time, end_time, created_at, description
+            user_id, event_type, event_title, selected_date, start_time, end_time, created_at, description, False
         )
         
     EVENT_TYPE_TO_METRIC = {

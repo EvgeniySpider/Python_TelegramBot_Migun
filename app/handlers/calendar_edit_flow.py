@@ -49,7 +49,6 @@ async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_
     
     elif query.data == "edit_field:private":
         # 1. Достаем ID редактируемого события из контекста
-        # (подставь тот ключ, в котором ты сохраняешь ID или индекс текущей заметки при входе в меню)
         event_id = context.user_data['edit_event_id'] 
         event_idx = context.user_data['edit_event_index']
 
@@ -74,7 +73,7 @@ async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_
         )
         
         # Пользователь остается в меню выбора поля для редактирования
-        return CHOOSING_EDIT_FIELD # (или как называется твой текущий state)
+        return CHOOSING_EDIT_FIELD
 
 
 # --- ОБРАБОТКА ВВОДА ТЕКСТА ---

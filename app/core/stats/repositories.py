@@ -52,7 +52,7 @@ class StatsRepository:
         # Запрос обновляет счетчик у существующего юзера. 
         # (Пользователь гарантированно существует, т.к. создается при /start)
         query = f"""
-            UPDATE app_user 
+            UPDATE users 
             SET {metric_name} = {metric_name} + $1
             WHERE telegram_id = $2
         """

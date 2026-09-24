@@ -42,6 +42,7 @@ from app.handlers.calendar_set_event import (
     handle_time_input_exact,
     handle_time_input_interval,
 )
+from app.handlers.export_events import handle_export_events
 from app.handlers.states import *
 
 # ============================================================================
@@ -218,6 +219,9 @@ HANDLERS: tuple[BaseHandler, ...] = (
     # Глобальный обработчик входящих приглашений (Принять / Отклонить)
     # Работает всегда и везде, вытаскивает callback_data по паттерну
     CallbackQueryHandler(handle_invite_response, pattern=r"^invite:(accept|reject):"),
+
+    # Выгрузка событий пользователя в форматах JSON и CSV
+    CommandHandler(['exportjson', 'exportcsv'], handle_export_events),
 
     # Подключение основной машины состояний
     calendar_conversation,

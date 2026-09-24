@@ -242,6 +242,9 @@ def generate_edit_fields_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("✏️ Дату", callback_data="edit_field:date")
         ],
         [
+           InlineKeyboardButton("👁 Изменить доступ", callback_data="edit_field:private") 
+        ],
+        [
             InlineKeyboardButton("🔙 Назад", callback_data="edit_field:cancel")
         ]
     ]

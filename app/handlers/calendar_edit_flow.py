@@ -1,6 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from app.handlers.states import (
+    CHOOSING_ACTION,
     CHOOSING_EDIT_FIELD,
     SELECTING_EDIT_EVENT,
     TYPING_EDIT_TITLE,
@@ -45,6 +46,35 @@ async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_
     elif query.data == "edit_field:date":
         # Передаем управление специализированному хэндлеру-обертке
         return await handle_edit_field_date(update, context)
+    
+    elif query.data == "edit_field:private":
+        # 1. Достаем ID редактируемого события из контекста
+        # (подставь тот ключ, в котором ты сохраняешь ID или индекс текущей заметки при входе в меню)
+        event_id = context.user_data['edit_event_id'] 
+        event_idx = context.user_data['edit_event_index']
+
+        # 2. Делаем быстрый запрос к БД для инверсии флага
+        async with context.application.database.connection() as conn:
+            await CalendarRepository.toggle_event_privacy(conn, event_id)
+            
+            # 3. Обновляем кэш в контексте, чтобы перерисовать карточку с новым статусом
+            user_id = update.effective_user.id
+            selected_date = context.user_data['selected_date']
+            updated_records = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
+            context.user_data['event_text_record'] = updated_records
+
+        # 4. Перерисовываем текущее меню с обновленным текстом
+        new_text = build_detailed_event_text(updated_records, index=event_idx, numbered=False)
+        full_text = "Ваша заметка, которую вы собираетесь менять:\n\n" + new_text
+
+        await query.edit_message_text(
+            text=full_text,
+            reply_markup=generate_edit_fields_keyboard(),
+            parse_mode="Markdown"
+        )
+        
+        # Пользователь остается в меню выбора поля для редактирования
+        return CHOOSING_EDIT_FIELD # (или как называется твой текущий state)
 
 
 # --- ОБРАБОТКА ВВОДА ТЕКСТА ---

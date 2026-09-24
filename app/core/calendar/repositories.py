@@ -109,3 +109,13 @@ class CalendarRepository:
         # "DELETE 5".split() -> ["DELETE", "5"] -> int("5") = 5
         deleted_count = int(result.split()[-1])
         return deleted_count
+
+    @staticmethod
+    async def toggle_event_privacy(conn: asyncpg.Connection, event_id: int) -> None:
+        """Инвертирует флаг публичности события."""
+        query = """
+            UPDATE events 
+            SET is_public = NOT is_public 
+            WHERE id = $1;
+        """
+        await conn.execute(query, event_id)

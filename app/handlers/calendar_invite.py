@@ -217,7 +217,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         appointment.status = Appointment.Status.CONFIRMED
         await appointment.asave()
         
-        guest_description = f"🤝 Встреча с пользователем {inviter_id}.\n"
+        guest_description = f"🤝 Встреча с пользователем {inviter_id}."
         if original_event.description:
             guest_description += f"\nОригинальное описание: {original_event.description}"
 

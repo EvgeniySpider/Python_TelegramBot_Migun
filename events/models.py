@@ -53,6 +53,12 @@ class Event(models.Model):
     end_time = models.TimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    is_public = models.BooleanField(
+        default=False, 
+        verbose_name="Публичное",
+        help_text="Доступно ли событие для просмотра другим пользователям"
+    )
+
     class Meta:
         db_table = "events"
         verbose_name = "Событие"

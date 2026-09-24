@@ -47,14 +47,16 @@ def build_detailed_event_text(events: List[Union[Record, dict]], index: int = 0,
 
     el = events[index]
 
-    # Сразу форматируем время, так как данные гарантированно валидны
     time_str = ('Весь день') if el['start_time'] is None else \
         format_event_time(el['start_time'], el['end_time'])
 
-    # Безопасно вытаскиваем описание
     desc_str = el.get('description')
     if not desc_str:
         desc_str = "Не указано"
+
+    # Обработка флага публичности
+    is_public = el.get('is_public', False)
+    status_str = "👁 Публичное (Видно другим)" if is_public else "🔒 Приватное (Только вы)"
 
     header = f"📝 *Просмотр события №{index + 1}*" if numbered else "📝 *Детальный просмотр события*"
 
@@ -62,7 +64,8 @@ def build_detailed_event_text(events: List[Union[Record, dict]], index: int = 0,
         header,
         f"📌 *Название*: {el['title']}",
         f"⏳ *Время*: {time_str}",
-        f"📖 *Описание*: {desc_str}\n"
+        f"📖 *Описание*: {desc_str}",
+        f"🛡 *Доступ*: {status_str}\n"
     ]
 
     return "\n".join(card_lines)

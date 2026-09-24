@@ -6,6 +6,16 @@ class User(models.Model):
 
     telegram_id = models.BigIntegerField(primary_key=True)
     registered_at = models.DateTimeField(auto_now_add=True)
+    
+    events_created = models.PositiveIntegerField(
+        default=0, verbose_name="Создано событий"
+    )
+    events_edited = models.PositiveIntegerField(
+        default=0, verbose_name="Отредактировано событий"
+    )
+    events_cancelled = models.PositiveIntegerField(
+        default=0, verbose_name="Отменено/удалено событий"
+    )
 
     class Meta:
         db_table = "users"

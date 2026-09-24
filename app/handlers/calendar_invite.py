@@ -5,7 +5,7 @@ from django.db.models import Q
 
 from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_back_to_menu_button
 from app.handlers.commands import calendar_command
-from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID
+from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
 from app.handlers.utils import get_validated_event_index
 from events.models import User, Event, Appointment
 from app.core.calendar.services import check_user_availability
@@ -277,13 +277,6 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
     # Встречи, на которые пригласили МЕНЯ
     invites_to_me = [m for m in meetings if m.invitee_id == telegram_id]
 
-    # Маппинг статусов для красивого вывода
-    status_map = {
-        "pending": "⏳ Ожидание",
-        "confirmed": "✅ Подтверждено",
-        "cancelled": "❌ Отменено"
-    }
-
     # === БЛОК 1: Мои приглашения ===
     if my_invites:
         text_my = "*🤝 Назначенные мною встречи:*\n\n"
@@ -340,3 +333,89 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="Markdown",
         reply_markup=generate_back_calendar_button()
     )
+
+
+async def handle_ask_telegram_id_for_public_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+
+    text = "Отправьте *Telegram ID* пользователя, события которого хотите посмотреть:"
+
+    await query.edit_message_text(
+        text=text,
+        parse_mode="Markdown",
+        reply_markup=generate_back_calendar_button()
+    )
+    return TYPING_PUBLIC_EVENTS_USER_ID
+
+
+async def handle_show_public_events_another_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    telegram_id_another_user = update.message.text.strip()
+    our_telegram_id = update.effective_user.id
+    
+    if not telegram_id_another_user.isdigit():
+        await update.message.reply_text("❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:")
+        return TYPING_PUBLIC_EVENTS_USER_ID
+
+    telegram_id_another_user = int(telegram_id_another_user)
+    
+    if telegram_id_another_user == our_telegram_id:
+        await update.message.reply_text("❌ В этом меню не можете смотреть свои заметки. Введите ID другого пользователя:")
+        return TYPING_PUBLIC_EVENTS_USER_ID
+
+    # Добавляем сортировку по дате и времени, чтобы список выводился хронологически
+    public_events = Event.objects.filter(
+        user_id=telegram_id_another_user,
+        is_public=True
+    ).order_by('event_date', 'start_time')
+
+    if not await public_events.aexists():
+        await update.message.reply_text(
+            "❌ У пользователя с таким Telegram ID нет публичных событий.",
+            # Кнопка возврата нужна и здесь, чтобы юзер не застрял, если ID валидный, но пустой
+            reply_markup=generate_back_calendar_button() 
+        )
+        return TYPING_PUBLIC_EVENTS_USER_ID
+
+    events = [event async for event in public_events]
+    
+    # Формируем заголовок
+    text_blocks = [f"🌐 *Публичные события пользователя {telegram_id_another_user}:*"]
+    
+    for idx, event in enumerate(events, start=1):
+        # Обязательно добавляем дату, так как мы выгружаем события за все дни сразу
+        date_str = event.event_date.strftime("%d.%m.%Y")
+        
+        if event.event_type == 'all_day':
+            time_str = "Весь день"
+        else:
+            start_str = event.start_time.strftime("%H:%M") if event.start_time else "..."
+            end_str = event.end_time.strftime("%H:%M") if event.end_time else "..."
+            time_str = f"{start_str} - {end_str}"
+            
+        block = (
+            f"📝 Просмотр события №{idx}\n"
+            f"📅 Дата: {date_str}\n"
+            f"📌 Название: {event.title}\n"
+            f"⏳ Время: {time_str}"
+        )
+        
+        if event.description:
+            block += f"\n📖 Описание: {event.description}"
+            
+        block += "\n🛡 Доступ: 🔓 Публичное (Видят все)"
+        
+        text_blocks.append(block)
+
+    final_text = "\n\n".join(text_blocks)
+    
+    # Защита от превышения лимита длины сообщения в Telegram (4096 символов)
+    if len(final_text) > 4000:
+        final_text = final_text[:4000] + "\n\n... (показана только часть событий)"
+
+    await update.message.reply_text(
+        text=final_text,
+        parse_mode="Markdown",
+        reply_markup=generate_back_calendar_button()
+    )
+    
+    return ConversationHandler.END

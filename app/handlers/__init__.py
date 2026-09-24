@@ -7,11 +7,13 @@ from telegram.ext import (
     filters
 )
 from app.handlers.calendar_invite import (
+    handle_ask_telegram_id_for_public_events,
     handle_invite_event_by_text_number,
     handle_invite_event_selection,
     handle_invitee_id_input,
     handle_invite_response,
-    handle_show_meetings
+    handle_show_meetings,
+    handle_show_public_events_another_user
 )
 from app.handlers.commands import start, calendar_command
 from app.handlers.calendar_act_with_options import (
@@ -48,7 +50,11 @@ from app.handlers.states import *
 calendar_conversation = ConversationHandler(
     # Точка входа в диалог: срабатывает исключительно при клике на конкретный день месяца
     entry_points=[
-        CallbackQueryHandler(handle_calendar_click, pattern = r"^(calendar_day:.+|calendar_ignore)$")
+        # Вход через клик по дню месяца
+        CallbackQueryHandler(handle_calendar_click, pattern = r"^(calendar_day:.+|calendar_ignore)$"),
+
+        # Вход через кнопку "Общие события"
+        CallbackQueryHandler(handle_ask_telegram_id_for_public_events, pattern=r"^public_events$")
     ],
     
     states={
@@ -108,6 +114,13 @@ calendar_conversation = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invitee_id_input),
             # Кнопка отмены на случай, если юзер передумал вводить ID
             CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^cancel_invite$")
+        ],
+
+        TYPING_PUBLIC_EVENTS_USER_ID: [
+            # Ловим текст с ID
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_show_public_events_another_user),
+            # Позволяем выйти назад в календарь, если юзер передумал
+            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
         ],
 
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)

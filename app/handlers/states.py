@@ -18,3 +18,4 @@ TYPING_EDIT_DATE = 16
 SELECTING_INVITE_EVENT = 17  # Выбор инлайн-кнопкой (2-10 событий)
 TYPING_INVITE_NUM = 18       # Ввод номера текстом (>10 событий)
 TYPING_INVITEE_ID = 19
+TYPING_PUBLIC_EVENTS_USER_ID = 20

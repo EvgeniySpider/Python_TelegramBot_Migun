@@ -1,6 +1,7 @@
 from asyncpg import Record
 from typing import Union, List
 from datetime import time
+from collections import deque
 
 
 def format_event_time(start_time: time, end_time: time) -> str:
@@ -38,7 +39,12 @@ def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = F
     return "Запланированные дела: \n" + "\n".join(raw_lines) + "\n\n"
 
 
-def build_detailed_event_text(events: List[Union[Record, dict]], index: int = 0, numbered: bool = False) -> str:
+def build_detailed_event_text(
+    events: List[Union[Record, dict]],
+    index: int = 0,
+    numbered: bool = False,
+    is_show_date: bool = False
+) -> str:
     """
     Генерирует детальный текстовый профиль (карточку) конкретного события для просмотра и изменения.
     """
@@ -47,12 +53,10 @@ def build_detailed_event_text(events: List[Union[Record, dict]], index: int = 0,
 
     el = events[index]
 
-    time_str = ('Весь день') if el['start_time'] is None else \
+    time_str = 'Весь день' if el['start_time'] is None else \
         format_event_time(el['start_time'], el['end_time'])
 
-    desc_str = el.get('description')
-    if not desc_str:
-        desc_str = "Не указано"
+    desc_str = el.get('description') or "Не указано"
 
     # Обработка флага публичности
     is_public = el.get('is_public', False)
@@ -67,6 +71,11 @@ def build_detailed_event_text(events: List[Union[Record, dict]], index: int = 0,
         f"📖 *Описание*: {desc_str}",
         f"🛡 *Доступ*: {status_str}\n"
     ]
+
+    # Если нужен вывод даты, вставляем её на 2-ю строчку (индекс 1)
+    if is_show_date:
+        date_str = el['event_date'].strftime('%d.%m.%Y')
+        card_lines.insert(1, f"📅 *Дата*: {date_str}")
 
     return "\n".join(card_lines)
 

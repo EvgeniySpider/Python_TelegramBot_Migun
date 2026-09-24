@@ -58,6 +58,9 @@ async def handle_typing_edit_title(update: Update, context: ContextTypes.DEFAULT
         await conn.execute("UPDATE events SET title = $1 WHERE id = $2", new_title, event_id)
 
     await context.application.stats_repository.increment_metric('events_edited')
+    await context.application.stats_repository.increment_user_metric(
+        update.effective_user.id, 'events_edited'
+    )
 
     context.user_data['edit_success_status'] = "✅ Название события успешно изменено!"
     # Сбрасываем пользователя обратно в главное меню месяца или дня
@@ -74,6 +77,9 @@ async def handle_typing_edit_desc(update: Update, context: ContextTypes.DEFAULT_
         await conn.execute("UPDATE events SET description = $1 WHERE id = $2", new_desc, event_id)
 
     await context.application.stats_repository.increment_metric('events_edited')
+    await context.application.stats_repository.increment_user_metric(
+        update.effective_user.id, 'events_edited'
+    )
 
     context.user_data['edit_success_status'] = "✅ Описание события успешно изменено!"
     return await _refresh_day_menu_after_edit(update, context)
@@ -266,6 +272,9 @@ async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_
     
     context.user_data['edit_success_status'] = header
     await context.application.stats_repository.increment_metric('events_edited')
+    await context.application.stats_repository.increment_user_metric(
+        update.effective_user.id, 'events_edited'
+    )
 
     state = await _refresh_day_menu_after_edit(update, context)
     return state
@@ -378,6 +387,9 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
         )
 
     await context.application.stats_repository.increment_metric('events_edited')
+    await context.application.stats_repository.increment_user_metric(
+        update.effective_user.id, 'events_edited'
+    )
 
     # 4. Обновляем selected_date в контексте, чтобы меню дня перерендерилось на НОВОЙ дате
     context.user_data['selected_date'] = target_date

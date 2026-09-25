@@ -1,5 +1,5 @@
 from django.db import models
-
+import secrets
 
 class User(models.Model):
     """Модель пользователя Telegram."""
@@ -17,6 +17,13 @@ class User(models.Model):
         default=0, verbose_name="Отменено/удалено событий"
     )
 
+    api_token = models.CharField(
+        max_length=64, 
+        unique=True, 
+        null=True, 
+        blank=True, 
+        verbose_name="API Токен"
+    )
     class Meta:
         db_table = "users"
         verbose_name = "Пользователь"
@@ -24,6 +31,12 @@ class User(models.Model):
 
     def __str__(self) -> str:
         return f"User {self.telegram_id}"
+
+    def roll_api_token(self) -> str:
+        """Генерирует, сохраняет и возвращает новый безопасный токен."""
+        self.api_token = secrets.token_urlsafe(32)
+        self.save(update_fields=['api_token'])
+        return self.api_token
 
 
 class Event(models.Model):

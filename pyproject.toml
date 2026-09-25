@@ -14,7 +14,8 @@ dependencies = [
     "psycopg2-binary>=2.9.0,<3.0.0",
     "asyncpg>=0.29.0,<0.32.0",
     "django (>=6.1.1,<7.0.0)",
-    "django-environ (>=0.14.0,<0.15.0)"
+    "django-environ (>=0.14.0,<0.15.0)",
+    "djangorestframework (>=3.18.1,<4.0.0)"
 ]
 
 

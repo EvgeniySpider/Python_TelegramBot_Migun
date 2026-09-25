@@ -8,6 +8,11 @@ class User(models.Model):
 
     telegram_id = models.BigIntegerField(primary_key=True)
     registered_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def is_authenticated(self):
+        """Флаг совместимости с DRF. Если объект получен по токену — он авторизован."""
+        return True
     
     events_created = models.PositiveIntegerField(
         default=0, verbose_name="Создано событий"

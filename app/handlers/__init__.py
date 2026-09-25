@@ -6,6 +6,7 @@ from telegram.ext import (
     ConversationHandler, 
     filters
 )
+from app.handlers.authorization import api_token_command
 from app.handlers.calendar_invite import (
     handle_ask_telegram_id_for_public_events,
     handle_invite_event_by_text_number,
@@ -222,6 +223,9 @@ HANDLERS: tuple[BaseHandler, ...] = (
 
     # Выгрузка событий пользователя в форматах JSON и CSV
     CommandHandler(['exportjson', 'exportcsv'], handle_export_events),
+
+    # Получение или просмотр токена для запросов по API
+    CommandHandler(['api_token'], api_token_command),
 
     # Подключение основной машины состояний
     calendar_conversation,

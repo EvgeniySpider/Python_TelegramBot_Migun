@@ -21,6 +21,7 @@ class AppSettings(BaseSettings):
     db_user: str = Field(alias="DB_USER")
     db_password: str = Field(alias="DB_PASSWORD")
     db_name: str = Field(alias="DB_NAME")
+    api_token_lifetime_minutes: int = Field(default=30, alias="API_TOKEN_LIFETIME_MINUTES")
 
     @property
     def secret_dsn(self) -> SecretStr:

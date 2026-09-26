@@ -2,6 +2,7 @@ from rest_framework import generics
 from events.models import Event
 from .serializers import PublicEventSerializer
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import MethodNotAllowed
 
 from .serializers import EventSerializer
 from .authentication import BotTokenAuthentication
@@ -33,22 +34,21 @@ class UserPublicEventListView(generics.ListAPIView):
         return Event.objects.filter(user_id=user_id, is_public=True).order_by('-event_date')
 
 
-class PrivateEventListCreateView(generics.ListCreateAPIView):
+class UserEventListCreateAPIView(generics.ListCreateAPIView):
     """
     GET /api/my-events/ - получить все свои события
     POST /api/my-events/ - создать новое событие
     """
-    # 1. Говорим DRF проверять наш кастомный токен
+    # 1. DRF проверка кастомного токена
     authentication_classes = [BotTokenAuthentication]
     # 2. Блокируем доступ анонимам (без токена или с невалидным токеном)
     permission_classes = [IsAuthenticated]
-    
     serializer_class = EventSerializer
-
+    
     def get_queryset(self):
         # request.user здесь - это тот самый юзер, которого вернул наш BotTokenAuthentication
         return Event.objects.filter(user=self.request.user).order_by('-event_date')
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: EventSerializer):
         # При POST-запросе жестко привязываем создаваемое событие к владельцу токена
         serializer.save(user=self.request.user)

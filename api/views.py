@@ -1,6 +1,6 @@
 from rest_framework import generics
 from events.models import Event
-from .serializers import PublicEventSerializer
+from .serializers import EventUpdateSerializer, PublicEventSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import MethodNotAllowed
 
@@ -52,3 +52,17 @@ class UserEventListCreateAPIView(generics.ListCreateAPIView):
     def perform_create(self, serializer: EventSerializer):
         # При POST-запросе жестко привязываем создаваемое событие к владельцу токена
         serializer.save(user=self.request.user)
+
+
+class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [BotTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Жестко ограничиваем доступ: пользователь может взаимодействовать только со своими событиями
+        return Event.objects.filter(user=self.request.user)
+        
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return EventUpdateSerializer
+        return EventSerializer

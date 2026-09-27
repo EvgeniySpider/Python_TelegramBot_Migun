@@ -11,11 +11,9 @@ class AppSettings(BaseSettings):
         extra="ignore"  # Игнор лишних переменных в .env, если они там появятся
     )
 
-    
     telegram_api_key: SecretStr = Field(alias="TELEGRAM_API_KEY")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    # Вот она — наша автоматическая труба до .env!
     db_host: str = Field(alias="DB_HOST")
     db_port: int = Field(alias="DB_PORT")
     db_user: str = Field(alias="DB_USER")

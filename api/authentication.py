@@ -1,10 +1,10 @@
-import os
 from datetime import timedelta
 from django.utils import timezone
-from events.models import User
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
-from settings.config import AppSettings
+
+from events.models import User
+from app.main import settings
 
 
 class BotTokenAuthentication(BaseAuthentication):
@@ -30,7 +30,7 @@ class BotTokenAuthentication(BaseAuthentication):
             raise AuthenticationFailed('Неверный токен.')
 
         # Проверяем срок годности
-        lifetime_minutes: int = AppSettings.api_token_lifetime_minutes
+        lifetime_minutes: int = settings.api_token_lifetime_minutes
         if user.api_token_created_at:
             expiration_time = user.api_token_created_at + timedelta(minutes=lifetime_minutes)
             if timezone.now() > expiration_time:

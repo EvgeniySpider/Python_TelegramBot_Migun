@@ -66,7 +66,7 @@ def create_app(app_settings: AppSettings) -> Application:
     )
     return application  # type: ignore[return-value]
 
-
+settings = AppSettings()
 if __name__ == '__main__':
     import asyncio
 
@@ -75,6 +75,6 @@ if __name__ == '__main__':
     # Явно создаем и регистрируем event loop, так как Python 3.14+ больше не делает это автоматически
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-    settings = AppSettings()
+    
     app = create_app(settings)
     app.run()

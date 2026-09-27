@@ -142,7 +142,7 @@ class EventUpdateSerializer(ModelSerializer):
             'created_at',
         ]
 
-def validate(self, attrs: dict) -> dict:
+    def validate(self, attrs: dict) -> dict:
         user = self.context['request'].user
         event = self.instance  # Гарантированно существует для PATCH/PUT
 

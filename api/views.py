@@ -1,9 +1,10 @@
 from rest_framework import generics
-from events.models import Event
-from .serializers import EventUpdateSerializer, PublicEventSerializer
+import requests
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import MethodNotAllowed
+from settings.config import AppSettings
 
+from events.models import Appointment, Event
+from .serializers import EventUpdateSerializer, PublicEventSerializer
 from .serializers import EventSerializer
 from .authentication import BotTokenAuthentication
 
@@ -66,3 +67,76 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in ('PUT', 'PATCH'):
             return EventUpdateSerializer
         return EventSerializer
+
+    def perform_destroy(self, instance: Event):
+        user = self.request.user
+        date_str = instance.event_date.strftime("%d.%m.%Y")
+        time_str = f"{instance.start_time.strftime('%H:%M')} - {instance.end_time.strftime('%H:%M')}" if instance.start_time else "Весь день"
+        
+        # Вспомогательная функция для синхронной отправки сообщений в Telegram
+        def send_tg_message(chat_id: int, text: str):
+            token = AppSettings.telegram_api_key
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            try:
+                requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=5)
+            except requests.RequestException as e:
+                print(f"Ошибка отправки уведомления в TG: {e}")
+
+        # ==========================================
+        # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
+        # ==========================================
+        hosted_appointments = Appointment.objects.filter(event=instance)
+        
+        if hosted_appointments.exists():
+            for appt in hosted_appointments:
+                invitee_id = appt.invitee_id
+                
+                # Находим и удаляем локальную копию в календаре ребенка
+                Event.objects.filter(
+                    user_id=invitee_id,
+                    event_date=instance.event_date,
+                    start_time=instance.start_time,
+                    end_time=instance.end_time
+                ).delete()
+                
+                # Удаляем саму запись о встрече
+                appt.delete()
+                
+                msg = (
+                    f"❌ *Отмена встречи*\n\n"
+                    f"Организатор (ID: `{user.id}`) отменил мероприятие:\n"
+                    f"📌 *Событие*: {instance.title}\n"
+                    f"📅 *Дата*: {date_str}\n"
+                    f"⏰ *Время*: {time_str}"
+                )
+                send_tg_message(invitee_id, msg)
+                
+        # ==========================================
+        # СЦЕНАРИЙ Б: Пользователь — РЕБЕНОК (приглашенный)
+        # ==========================================
+        else:
+            appt_as_invitee = Appointment.objects.filter(
+                invitee=user,
+                event__event_date=instance.event_date,
+                event__start_time=instance.start_time,
+                event__end_time=instance.end_time
+            ).first()
+
+            if appt_as_invitee and appt_as_invitee.status != Appointment.Status.CANCELLED:
+                organizer_id = appt_as_invitee.event.user_id
+                msg = (
+                    f"❌ *Отмена участия*\n\n"
+                    f"Пользователь (ID: `{user.id}`) отменил свое участие:\n"
+                    f"📌 *Событие*: {appt_as_invitee.event.title}\n"
+                    f"📅 *Дата*: {date_str}\n"
+                    f"⏰ *Время*: {time_str}"
+                )
+                send_tg_message(organizer_id, msg)
+                
+                # Удаляем только связь, событие организатора остается
+                appt_as_invitee.delete()
+
+        # ==========================================
+        # В конце физически удаляем само событие (сработает для обоих сценариев)
+        # ==========================================
+        instance.delete()

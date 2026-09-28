@@ -151,8 +151,8 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         selected_date = context.user_data.get('selected_date')
         delete_text = f"событие № {id_event + 1}?", 'заметку.'
 
-        event_time = format_event_time(
-            event_rec["start_time"], event_rec["end_time"])
+        event_time = format_event_time(event_rec["start_time"], event_rec["end_time"]) \
+        if event_rec['start_time'] and event_rec['end_time'] else 'Весь день'
         # Корректируем экранирование под твой успешный тест (2 знака)
         event = f"📌 *Событие*: \\[{event_time}] {event_rec['title']}\n"
 

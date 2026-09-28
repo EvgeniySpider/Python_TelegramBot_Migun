@@ -193,6 +193,9 @@ class EventUpdateSerializer(ModelSerializer):
             if start_time >= end_time:
                 raise ValidationError("Время начала должно быть строго раньше времени окончания.")
 
+        if Event.objects.filter(user=user, event_date=event_date, event_type=Event.EventType.ALL_DAY).exclude(id=event.id).exists():
+            raise ValidationError("На эту дату уже запланировано событие на весь день, добавить точное время или интервал нельзя.")
+
         # 5. ПРОВЕРКА КОЛЛИЗИЙ ВРЕМЕНИ
         qs_conflicts = Event.objects.filter(
             user=user,

@@ -1,8 +1,9 @@
 from rest_framework import generics
 import requests
 from rest_framework.permissions import IsAuthenticated
-from settings.config import AppSettings
+import logging
 
+from app.main import settings
 from events.models import Appointment, Event
 from .serializers import EventUpdateSerializer, PublicEventSerializer
 from .serializers import EventSerializer
@@ -73,14 +74,31 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         date_str = instance.event_date.strftime("%d.%m.%Y")
         time_str = f"{instance.start_time.strftime('%H:%M')} - {instance.end_time.strftime('%H:%M')}" if instance.start_time else "Весь день"
         
+        # Инициализируем логгер для текущего модуля
+        logger = logging.getLogger(__name__)
+        
         # Вспомогательная функция для синхронной отправки сообщений в Telegram
-        def send_tg_message(chat_id: int, text: str):
-            token = AppSettings.telegram_api_key
+        def send_tg_message(chat_id: int, text: str) -> None:
+            token = settings.telegram_api_key.get_secret_value()
             url = f"https://api.telegram.org/bot{token}/sendMessage"
+            
             try:
-                requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=5)
+                response = requests.post(
+                    url, 
+                    json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, 
+                    timeout=5
+                )
+                
+                # Если запрос дошёл, но Telegram вернул ошибку (400, 403, 404)
+                if not response.ok:
+                    logger.error(
+                        "Ошибка Telegram API при отправке уведомления. "
+                        f"Chat ID: {chat_id}, Статус: {response.status_code}, Ответ: {response.text}"
+                    )
+                    
             except requests.RequestException as e:
-                print(f"Ошибка отправки уведомления в TG: {e}")
+                # Ловим сетевые сбои (нет интернета, таймаут соединения)
+                logger.error(f"Сетевая ошибка при отправке TG уведомления на chat_id={chat_id}: {e}")
 
         # ==========================================
         # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
@@ -104,7 +122,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                 
                 msg = (
                     f"❌ *Отмена встречи*\n\n"
-                    f"Организатор (ID: `{user.id}`) отменил мероприятие:\n"
+                    f"Организатор (ID: `{user.telegram_id}`) отменил мероприятие:\n"
                     f"📌 *Событие*: {instance.title}\n"
                     f"📅 *Дата*: {date_str}\n"
                     f"⏰ *Время*: {time_str}"
@@ -126,7 +144,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                 organizer_id = appt_as_invitee.event.user_id
                 msg = (
                     f"❌ *Отмена участия*\n\n"
-                    f"Пользователь (ID: `{user.id}`) отменил свое участие:\n"
+                    f"Пользователь (ID: `{user.telegram_id}`) отменил свое участие:\n"
                     f"📌 *Событие*: {appt_as_invitee.event.title}\n"
                     f"📅 *Дата*: {date_str}\n"
                     f"⏰ *Время*: {time_str}"

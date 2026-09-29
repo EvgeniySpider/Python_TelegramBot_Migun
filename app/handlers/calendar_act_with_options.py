@@ -24,6 +24,7 @@ from app.handlers.calendar_keyboard import (
 )
 from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
 from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
+from events.models import Appointment
 
 
 async def show_event_selection_list(query: CallbackQuery, event_text_record: list, action: str) -> int:
@@ -112,7 +113,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             event_rec = event_text_record[0]
             selected_date = context.user_data.get('selected_date')
             user_id = update.effective_user.id
-            
+
             is_invitee = await is_user_invitee_for_event(
                 user_id=user_id,
                 selected_date=selected_date,
@@ -122,9 +123,13 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
             if is_invitee:
                 await query.answer(
-                    "❌ Редактировать встречу может только организатор. Вы можете только удалить её (отменить участие).", 
+                    "❌ Нельзя редактировать встречу на которую вас пригласили. Вы можете только удалить её (отменить участие).", 
                     show_alert=False
                 )
+                return CHOOSING_ACTION
+
+            if await Appointment.objects.filter(event = event_rec['id']).aexists():
+                await query.answer('❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать')
                 return CHOOSING_ACTION
 
             detailed_event_text = build_detailed_event_text(event_text_record, index=0, numbered=False)

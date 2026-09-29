@@ -21,6 +21,7 @@ from datetime import datetime, date
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.services import CalendarService
 from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
+from events.models import Appointment
 
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
@@ -167,6 +168,10 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
         )
         return SELECTING_EDIT_EVENT
 
+    if await Appointment.objects.filter(event = event_rec['id']).aexists():
+        await query.answer('❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать')
+        return SELECTING_EDIT_EVENT
+
     context.user_data['edit_event_index'] = index_record
     context.user_data['current_event_time'] = (event_rec['start_time'], event_rec['end_time'])
     context.user_data['edit_event_id'] = event_rec['id']
@@ -208,6 +213,10 @@ async def handle_edit_event_by_text_number(update: Update, context: ContextTypes
             "❌ Редактировать встречу может только организатор.\n\n"
             "Пожалуйста, отправьте номер другого события для редактирования:"
         )
+        return TYPING_EDIT_NUM
+
+    if await Appointment.objects.filter(event = event_rec['id']).aexists():
+        await update.message.reply_text('❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать')
         return TYPING_EDIT_NUM
 
     context.user_data['edit_event_index'] = index_record

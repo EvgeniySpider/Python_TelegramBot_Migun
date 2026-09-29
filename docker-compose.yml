@@ -8,9 +8,49 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
-      - "${DB_PORT:-5444}:5432"
+      - "5444:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Используем переменные из .env, чтобы Compose подставил их корректно
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-calendar_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      target: development
+    container_name: calendar_web
+    command: python manage.py runserver 0.0.0.0:8000
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  bot:
+    build:
+      context: .
+      target: development
+    container_name: calendar_tg_bot
+    command: python -m app.main
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
 
 volumes:
   postgres_data:

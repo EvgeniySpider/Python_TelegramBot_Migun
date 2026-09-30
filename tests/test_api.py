@@ -30,16 +30,8 @@ def test_get_public_user_event_list(
     test_user: User,
     public_event: Event,
     private_event: Event,
+    alien_event: Event
 ):
-    # Создаем чужого пользователя и его публичное событие
-    other_user = User.objects.create(telegram_id=999999999)
-    Event.objects.create(
-        user=other_user,
-        event_type='all_day',
-        title='Событие другого пользователя',
-        event_date=public_event.event_date,
-        is_public=True
-    )
 
     url: str = reverse('api:user-public-events-list', kwargs={'telegram_id': test_user.telegram_id})
     response: Response = api_client.get(url)
@@ -52,3 +44,27 @@ def test_get_public_user_event_list(
     assert data[0]['title'] == 'Тестовое публичное событие'
     assert data[0]['is_public'] is True
     assert data[0]['user'] == test_user.telegram_id
+
+
+@pytest.mark.django_db
+def test_get_user_event_list(
+    auth_client: APIClient,
+    test_user: User,
+    public_event: Event,
+    private_event: Event,
+    alien_event: Event
+) -> None:
+    
+    url: str = reverse('api:private-events-list')
+    response: Response = auth_client.get(url)
+
+    # 1. Сначала статус
+    assert response.status_code == status.HTTP_200_OK
+
+    # 2. Затем парсинг и валидация
+    data: list[dict] = response.json()
+    assert len(data) == 2
+
+    # 3. Безопасная проверка без жесткой привязки к порядку
+    assert {item['is_public'] for item in data} == {True, False}
+    assert all(item['user'] == test_user.telegram_id for item in data)

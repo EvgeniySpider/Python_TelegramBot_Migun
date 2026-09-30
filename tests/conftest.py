@@ -1,6 +1,7 @@
 import pytest
 from datetime import date, time
 from rest_framework.test import APIClient
+from django.utils import timezone
 
 from events.models import Event, User
 
@@ -44,4 +45,29 @@ def private_event(test_user: User) -> Event:
         start_time=time(10, 0),
         end_time=time(11, 0),
         is_public=False
+    )
+
+
+@pytest.fixture
+def auth_client(api_client: APIClient, test_user: User) -> APIClient:
+    """Авторизует клиента в обход проверки токенов (DRF way)."""
+    api_client.force_authenticate(user=test_user)
+    return api_client
+
+
+@pytest.fixture
+def alien_user(db) -> User:
+    """Создает стороннего пользователя для проверки изоляции данных."""
+    return User.objects.create(telegram_id=999999999)
+
+
+@pytest.fixture
+def alien_event(alien_user: User) -> Event:
+    """Создает публичное событие, принадлежащее чужому пользователю."""
+    return Event.objects.create(
+        user=alien_user,
+        event_type='all_day',
+        title='Событие другого пользователя',
+        event_date=date.today(),
+        is_public=True
     )

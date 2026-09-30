@@ -53,7 +53,7 @@ def test_get_user_event_list(
     public_event: Event,
     private_event: Event,
     alien_event: Event
-) -> None:
+):
     
     url: str = reverse('api:private-events-list')
     response: Response = auth_client.get(url)
@@ -68,3 +68,38 @@ def test_get_user_event_list(
     # 3. Безопасная проверка без жесткой привязки к порядку
     assert {item['is_public'] for item in data} == {True, False}
     assert all(item['user'] == test_user.telegram_id for item in data)
+
+
+
+@pytest.mark.django_db
+def test_create_event(auth_client: APIClient, test_user: User):
+    url: str = reverse('api:private-events-list')
+
+    payload = {
+        'event_type': 'interval',
+        'title': 'лучшее название',
+        'description': 'лучшее описание',
+        'event_date': '2026-09-09',
+        'start_time': '10:00',
+        'end_time': '12:00',
+        'is_public': False
+    }
+
+    response: Response = auth_client.post(url, data=payload, format='json')
+    assert response.status_code == status.HTTP_201_CREATED
+
+    created_event: dict = response.json()
+
+    assert created_event['user'] == test_user.telegram_id
+    assert created_event['event_type'] == payload['event_type']
+    assert created_event['title'] == payload['title']
+    assert created_event['description'] == payload['description']
+    assert created_event['event_date'] == payload['event_date']
+    assert created_event['start_time'] == payload['start_time'] + ':00'
+    assert created_event['end_time'] == payload['end_time'] + ':00'
+    assert created_event['is_public'] == payload['is_public']
+
+    db_event = Event.objects.get(id=created_event['id'])
+    assert db_event.user == test_user
+    assert db_event.title == payload['title']
+    assert db_event.event_type == payload['event_type']

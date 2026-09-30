@@ -169,3 +169,55 @@ def test_create_event_with_invalid_fields(
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     errors: dict = response.json()
     assert key in errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    'event_type, start_time, end_time',
+    [
+        # Сценарии для 'all_day': время передавать запрещено
+        ('all_day', '10:00', None),
+        ('all_day', None, '12:00'),
+        ('all_day', '10:00', '12:00'),
+        
+        # Сценарии для 'exact': обязателен start_time, запрещен end_time
+        ('exact', None, None),
+        ('exact', '10:00', '12:00'),
+        ('exact', None, '12:00'),
+        
+        # Сценарии для 'interval': обязательны оба поля
+        ('interval', '10:00', None),
+        ('interval', None, '12:00'),
+        ('interval', None, None),
+    ]
+)
+def test_create_event_business_logic_conflicts(
+    auth_client: APIClient,
+    event_type: str,
+    start_time: str | None,
+    end_time: str | None
+) -> None:
+    url: str = reverse('api:private-events-list')
+    
+    payload: dict = {
+        'title': 'Бизнес-логика проверка',
+        'event_date': '2026-09-09',
+        'is_public': False,
+        'event_type': event_type,
+    }
+    
+    # Добавляем ключи времени только если они не None, 
+    # чтобы сымитировать реальное отсутствие полей в запросе
+    if start_time:
+        payload['start_time'] = start_time
+    if end_time:
+        payload['end_time'] = end_time
+
+    response: Response = auth_client.post(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    errors: dict = response.json()
+    # Поскольку в serializers.py исключения вызываются как raise ValidationError("текст ошибки"), 
+    # DRF автоматически складывает их в массив по ключу 'non_field_errors'
+    assert 'non_field_errors' in errors

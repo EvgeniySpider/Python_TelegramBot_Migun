@@ -83,6 +83,7 @@ class EventSerializer(ModelSerializer):
                 )
             return attrs
 
+
         elif event_type == Event.EventType.EXACT:
             if not start_time:
                 raise ValidationError('Для события с типом "точное время" необходимо указать start_time')
@@ -94,7 +95,13 @@ class EventSerializer(ModelSerializer):
             end_time = (start_dt + timedelta(minutes=30)).time()
             # Сохраняем вычисленное время, чтобы оно не было None в нижнем фильтре и ушло в БД
             attrs['end_time'] = end_time
-            
+
+        if event_type in [Event.EventType.INTERVAL, Event.EventType.EXACT]:
+            if not start_time or not end_time:
+                raise ValidationError("Не указано время для данного типа события.")
+            if start_time >= end_time:
+                raise ValidationError("Время начала должно быть строго раньше времени окончания.")
+
         elif event_type == Event.EventType.INTERVAL:
             if not start_time or not end_time:
                 raise ValidationError('Для события с типом "интервал" необходимо время начала и конца мероприятия')

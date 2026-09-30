@@ -221,3 +221,84 @@ def test_create_event_business_logic_conflicts(
     # Поскольку в serializers.py исключения вызываются как raise ValidationError("текст ошибки"), 
     # DRF автоматически складывает их в массив по ключу 'non_field_errors'
     assert 'non_field_errors' in errors
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    'payload_override, expected_error_key',
+    [
+        # Невалидные даты (отбивает встроенный DateField)
+        ({'event_date': '2026-09-31'}, 'event_date'),  # В сентябре 30 дней
+        ({'event_date': '2026-02-29'}, 'event_date'),  # 2026 - не високосный
+        ({'event_date': '2026-13-01'}, 'event_date'),  # Нет 13-го месяца
+
+        # Невалидное время (отбивает встроенный TimeField)
+        ({'start_time': '25:00'}, 'start_time'),       # В сутках 24 часа
+        ({'end_time': '12:61'}, 'end_time'),           # В минуте 60 секунд
+
+        # Нарушение хронологии (отбивает validate)
+        (
+            {'event_type': 'interval', 'start_time': '12:00', 'end_time': '10:00'},
+            'non_field_errors' 
+        ),
+    ]
+)
+def test_create_event_datetime_boundaries(
+    auth_client: APIClient,
+    payload_override: dict,
+    expected_error_key: str
+):
+    url: str = reverse('api:private-events-list')
+    payload = {
+        'title': 'Тест форматов',
+        'event_date': '2026-09-09',
+        'is_public': False,
+        'event_type': 'interval',
+        'start_time': '10:00',
+        'end_time': '12:00'
+    }
+    payload.update(payload_override)
+    
+    response: Response = auth_client.post(url, data=payload, format='json')
+    
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert expected_error_key in response.json()
+
+
+@pytest.mark.django_db
+def test_create_event_time_collisions(auth_client: APIClient, test_user: User):
+    # 1. Бронируем время в БД (12:00 - 14:00)
+    Event.objects.create(
+        user=test_user,
+        event_type='interval',
+        title='Уже занятый слот',
+        event_date='2026-10-10',
+        start_time='12:00',
+        end_time='14:00',
+        is_public=False
+    )
+    
+    url: str = reverse('api:private-events-list')
+    base_payload = {
+        'title': 'Попытка вклиниться',
+        'event_date': '2026-10-10',
+        'is_public': False,
+    }
+
+    # Сценарий А: Пересечение интервалов (внахлест слева 11:00-13:00)
+    payload = {**base_payload, 'event_type': 'interval', 'start_time': '11:00', 'end_time': '13:00'}
+    response: Response = auth_client.post(url, data=payload, format='json')
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'non_field_errors' in response.json()
+
+    # Сценарий Б: Точное время (exact) падает прямо внутрь занятого интервала (в 13:00)
+    payload = {**base_payload, 'event_type': 'exact', 'start_time': '13:00'}
+    response: Response = auth_client.post(url, data=payload, format='json')
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'non_field_errors' in response.json()
+
+    # Сценарий В: Попытка объявить весь день (all_day) занятым, хотя внутри уже есть интервал
+    payload = {**base_payload, 'event_type': 'all_day'}
+    response: Response = auth_client.post(url, data=payload, format='json')
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert 'non_field_errors' in response.json()

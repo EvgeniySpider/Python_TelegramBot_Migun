@@ -116,7 +116,7 @@ def test_create_event_missing_required_fields(
 ) -> None:
     url: str = reverse('api:private-events-list')
 
-    payload: dict = {
+    payload  = {
         'event_type': 'interval',
         'title': 'Рабочая встреча',
         'event_date': '2026-09-09',
@@ -137,3 +137,35 @@ def test_create_event_missing_required_fields(
     assert missing_field in errors
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    'key, value',
+    [
+        ('event_type', 'unexist'),
+        ('event_date', 'not-a-date'),
+        ('start_time', 'not-a-time'),
+        ('is_public', 'not-a-boolean'),
+    ]
+)
+def test_create_event_with_invalid_fields(
+    auth_client: APIClient,
+    key: str,
+    value: str
+):
+    url: str = reverse('api:private-events-list')
+    payload = {
+        'event_type': 'interval',
+        'title': 'Рабочая встреча',
+        'event_date': '2026-09-09',
+        'start_time': '10:00',
+        'end_time': '12:00',
+        'is_public': False,
+    }
+
+    payload[key] = value
+
+    response: Response = auth_client.post(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors: dict = response.json()
+    assert key in errors

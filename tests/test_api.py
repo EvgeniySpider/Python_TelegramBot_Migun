@@ -103,3 +103,37 @@ def test_create_event(auth_client: APIClient, test_user: User):
     assert db_event.user == test_user
     assert db_event.title == payload['title']
     assert db_event.event_type == payload['event_type']
+
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    'missing_field', ['title', 'event_type', 'event_date']
+)
+def test_create_event_missing_required_fields(
+    auth_client: APIClient, 
+    missing_field: str
+) -> None:
+    url: str = reverse('api:private-events-list')
+
+    payload: dict = {
+        'event_type': 'interval',
+        'title': 'Рабочая встреча',
+        'event_date': '2026-09-09',
+        'start_time': '10:00',
+        'end_time': '12:00',
+        'is_public': False,
+    }
+    # Вырезаем проверяемое поле из полезной нагрузки
+    del payload[missing_field]
+
+    response: Response = auth_client.post(url, data=payload, format='json')
+
+    # 1. Сервер обязан вернуть 400 Bad Request
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    # 2. Сериализатор должен указать ошибку именно на отсутствующее поле
+    errors: dict = response.json()
+    assert missing_field in errors
+
+

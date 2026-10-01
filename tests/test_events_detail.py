@@ -216,7 +216,6 @@ def test_patch_event_type_is_ignored(
     private_event.refresh_from_db()
     # Тип не должен был измениться
     assert private_event.event_type != Event.EventType.ALL_DAY
-    print(response.json())
 
 
 @pytest.mark.django_db

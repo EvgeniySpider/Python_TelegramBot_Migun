@@ -3,7 +3,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.test import APIClient
-from events.models import Event, User
+
+from events.models import Event, User, Appointment
 
 
 @pytest.mark.django_db
@@ -84,3 +85,86 @@ def test_patch_event_date(
 
     private_event.refresh_from_db()
     assert str(private_event.event_date) == new_date
+
+
+@pytest.mark.django_db
+def test_patch_alien_event_returns_404(
+    auth_client: APIClient,
+    alien_event: Event
+):
+    url: str = reverse('api:private-events-detail', kwargs={'pk': alien_event.id})
+    payload = {'title': 'Взлом чужого события'}
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    # DRF возвращает 404, защищая приватность чужих записей
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    # Убеждаемся, что в базе запись не изменилась
+    alien_event.refresh_from_db()
+    assert alien_event.title != payload['title']
+
+
+@pytest.mark.django_db
+def test_patch_event_with_appointment_forbidden(
+    auth_client: APIClient,
+    test_user: User,
+    alien_user: User,
+    private_event: Event
+):
+    # Создаем привязанную встречу, где test_user является организатором
+    Appointment.objects.create(
+        event=private_event,
+        invitee=alien_user
+    )
+
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+    payload = {'title': 'Попытка изменить встречу'}
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert 'non_field_errors' in errors
+
+    # Проверяем, что название в БД осталось исходным
+    private_event.refresh_from_db()
+    assert private_event.title != payload['title']
+
+
+@pytest.mark.django_db
+def test_patch_invitee_event_forbidden(
+    auth_client: APIClient,
+    test_user: User,
+    alien_user: User,
+    private_event: Event,
+    alien_event: Event
+) -> None:
+    # 1. Синхронизируем параметры событий, чтобы сработал фильтр is_invitee_meeting
+    alien_event.event_date = private_event.event_date
+    alien_event.start_time = private_event.start_time
+    alien_event.end_time = private_event.end_time
+    alien_event.event_type = private_event.event_type
+    alien_event.save()
+
+    # 2. Создаем встречу: alien_user пригласил test_user
+    Appointment.objects.create(
+        event=alien_event,
+        invitee=test_user
+    )
+
+    # 3. test_user (клиент auth_client) пытается изменить СВОЮ копию события
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+    payload = {'title': 'Попытка ребенка изменить встречу'}
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    # 4. Проверяем отсечку валидатором EventUpdateSerializer
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert 'non_field_errors' in errors
+    assert 'Вас пригласили на встречу' in errors['non_field_errors'][0]
+
+    # 5. Убеждаемся, что событие в БД не изменилось
+    private_event.refresh_from_db()
+    assert private_event.title != payload['title']

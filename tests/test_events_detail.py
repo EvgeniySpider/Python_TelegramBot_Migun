@@ -139,7 +139,7 @@ def test_patch_invitee_event_forbidden(
     alien_user: User,
     private_event: Event,
     alien_event: Event
-) -> None:
+):
     # 1. Синхронизируем параметры событий, чтобы сработал фильтр is_invitee_meeting
     alien_event.event_date = private_event.event_date
     alien_event.start_time = private_event.start_time
@@ -150,7 +150,8 @@ def test_patch_invitee_event_forbidden(
     # 2. Создаем встречу: alien_user пригласил test_user
     Appointment.objects.create(
         event=alien_event,
-        invitee=test_user
+        invitee=test_user,
+        status=Appointment.Status.CONFIRMED
     )
 
     # 3. test_user (клиент auth_client) пытается изменить СВОЮ копию события
@@ -168,3 +169,78 @@ def test_patch_invitee_event_forbidden(
     # 5. Убеждаемся, что событие в БД не изменилось
     private_event.refresh_from_db()
     assert private_event.title != payload['title']
+
+
+@pytest.mark.django_db
+def test_patch_event_time_collision(
+    auth_client: APIClient,
+    test_user: User,
+    private_event: Event
+):
+    # Создаем второе событие пользователя в этот же день
+    Event.objects.create(
+        user=test_user,
+        event_type=Event.EventType.INTERVAL,
+        title='Второе событие',
+        event_date=private_event.event_date,
+        start_time='14:00',
+        end_time='16:00',
+        is_public=False
+    )
+
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+    # Пытаемся сдвинуть private_event на 14:30 (попадает внутрь второго события)
+    payload = {'start_time': '14:30'}
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert 'non_field_errors' in errors
+    assert 'Конфликт времён' in errors['non_field_errors'][0]
+
+
+@pytest.mark.django_db
+def test_patch_event_type_is_ignored(
+    auth_client: APIClient,
+    private_event: Event
+):
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+    payload = {'event_type': Event.EventType.ALL_DAY}
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    # DRF не падает на лишних read-only полях, а молча их отбрасывает
+    assert response.status_code == status.HTTP_200_OK
+
+    private_event.refresh_from_db()
+    # Тип не должен был измениться
+    assert private_event.event_type != Event.EventType.ALL_DAY
+    print(response.json())
+
+
+@pytest.mark.django_db
+def test_patch_interval_event_invalid_chronology(
+    auth_client: APIClient,
+    test_user: User
+):
+    interval_event = Event.objects.create(
+        user=test_user,
+        event_type=Event.EventType.INTERVAL,
+        title='Интервальное событие',
+        event_date='2026-09-09',
+        start_time='10:00',
+        end_time='12:00',
+        is_public=False
+    )
+
+    url: str = reverse('api:private-events-detail', kwargs={'pk': interval_event.id})
+    # Делаем конец интервала раньше начала (10:00 > 09:00)
+    payload = {'end_time': '09:00'}
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert 'non_field_errors' in errors
+    assert 'Время начала должно быть строго раньше' in errors['non_field_errors'][0]

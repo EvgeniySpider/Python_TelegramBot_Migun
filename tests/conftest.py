@@ -43,7 +43,7 @@ def private_event(test_user: User) -> Event:
         title='Секретное событие',
         event_date=date.today(),
         start_time=time(10, 0),
-        end_time=time(11, 0),
+        end_time=time(10, 30),
         is_public=False
     )
 

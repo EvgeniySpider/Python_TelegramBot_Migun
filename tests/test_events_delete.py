@@ -130,3 +130,27 @@ def test_delete_invitee_event_keeps_organizer_and_notifies(
     # Уведомление должно уйти организатору (alien_user)
     assert call_kwargs['json']['chat_id'] == alien_user.telegram_id
     assert "Отмена участия" in call_kwargs['json']['text']
+
+
+@pytest.mark.django_db
+def test_delete_unexistent_event(auth_client: APIClient):
+    url: str = reverse('api:private-events-detail', kwargs={'pk': 999})
+    response: Response = auth_client.delete(url)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_double_delete_event(
+    auth_client: APIClient,
+    private_event: Event
+):
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+    response: Response = auth_client.delete(url)
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+    assert not Event.objects.filter(id=private_event.id).exists()
+
+    response: Response = auth_client.delete(url)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND

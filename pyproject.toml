@@ -16,7 +16,8 @@ dependencies = [
     "django (>=6.1.1,<7.0.0)",
     "django-environ (>=0.14.0,<0.15.0)",
     "djangorestframework (>=3.18.1,<4.0.0)",
-    "requests (>=2.34.2,<3.0.0)"
+    "requests (>=2.34.2,<3.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)"
 ]
 
 

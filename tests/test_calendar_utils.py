@@ -1,5 +1,6 @@
 import datetime
-from app.core.calendar.utils import build_detailed_event_text
+
+from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 
 def test_build_detailed_event_text_basic():
     # 1. ПОДГОТОВКА ФЕЙКОВЫХ ДАННЫХ (Обычные словари)
@@ -15,7 +16,7 @@ def test_build_detailed_event_text_basic():
     ]
 
     # 2. ВЫЗОВ ФУНКЦИИ
-    result = build_detailed_event_text(
+    result: str = build_detailed_event_text(
         events=fake_events,
         index=0,
         numbered=True,
@@ -43,8 +44,26 @@ def test_build_detailed_event_text_all_day_and_public():
         }
     ]
 
-    result = build_detailed_event_text(events=fake_events, index=0)
+    result: str = build_detailed_event_text(events=fake_events, index=0)
 
     assert "⏳ *Время*: Весь день" in result
     assert "📖 *Описание*: Не указано" in result
     assert "👁 Публичное (Видно другим)" in result
+
+
+def test_build_events_list_text_empty():
+    # Пустой список (свободный день)
+    result: str = build_events_list_text([])
+    assert "Запланированные дела:" in result
+    assert "весь день" not in result
+    
+
+def test_build_events_list_text_with_data():
+    # Имитация списка дел
+    fake_events = [
+        {'title': 'Уборка', 'start_time': None, 'end_time': None, 'event_type': 'all_day'}
+    ]
+    result: str = build_events_list_text(fake_events, numbered=False)
+    assert "Запланированные дела:" in result
+    assert "• Уборка (весь день)" in result
+    

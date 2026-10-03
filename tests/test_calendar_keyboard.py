@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import datetime, date
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
+from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
+from app.handlers.states import WAITING_FOR_TIME_INPUT_INTERVAL
 
 
 def test_generate_calendar_keyboard_complex_state():
@@ -150,3 +152,37 @@ async def test_calendar_command_text_command(mock_calendar_keyboard, mock_busy_d
     kwargs = context_mock.bot.send_message.call_args.kwargs
     assert kwargs['chat_id'] == update_mock.effective_chat.id
     assert kwargs['reply_markup'] == "fake_markup"
+
+
+@pytest.mark.asyncio
+async def test_handle_set_event_interval_free_day():
+    update_mock = AsyncMock()
+    # Имитируем callback_data, где parts[1] == "interval"
+    update_mock.callback_query.data = "some_prefix:interval"
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    context_mock = MagicMock()
+    # Имитируем состояние ОЗУ после клика по свободному дню
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 21),
+        'event_text_record': [] # День полностью свободен
+    }
+
+    # ВЫЗОВ
+    result = await handle_set_event(update_mock, context_mock)
+
+    # ПРОВЕРКИ
+    # 1. Проверяем, что в ОЗУ записался правильный тип события
+    assert context_mock.user_data['event_type'] == 'interval'
+
+    # 2. Проверяем, что текст изменился и содержит нужные куски интерфейса
+    update_mock.callback_query.edit_message_text.assert_called_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    assert "Выбрана дата: 21.10.2026" in kwargs['text']
+    assert "Запланированные дела:" in kwargs['text'] # Пришло из нашей утилиты
+    assert "Тип события: [ ⏳ Интервал ]" in kwargs['text']
+    assert "Введите время начала и конца" in kwargs['text']
+
+    # 3. Гарантируем, что ConversationHandler получил команду ждать время
+    assert result == WAITING_FOR_TIME_INPUT_INTERVAL

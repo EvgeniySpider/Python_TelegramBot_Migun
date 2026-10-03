@@ -4,7 +4,8 @@ from unittest.mock import patch, AsyncMock, MagicMock
 
 
 from app.handlers.calendar_callbacks import handle_calendar_click
-from app.handlers.states import CHOOSING_ACTION, CHOOSING_TIME
+from app.handlers.calendar_set_event import handle_time_input_interval
+from app.handlers.states import CHOOSING_ACTION, CHOOSING_TIME, WAITING_FOR_TITLE, WAITING_FOR_TIME_INPUT_INTERVAL
 
 
 @pytest.mark.asyncio
@@ -126,3 +127,113 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
     assert kwargs['reply_markup'] == "fake_options_keyboard"
 
     assert result == CHOOSING_ACTION
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')
+async def test_handle_time_input_interval_success(mock_has_conflict: AsyncMock):
+    # 1. ПОДГОТОВКА МОКОВ
+    # Имитируем, что выбранное время свободно (нет конфликтов)
+    mock_has_conflict.return_value = False
+
+    update_mock = AsyncMock()
+    # Имитируем текстовое сообщение от пользователя. 
+    # Специально добавляем пробелы, чтобы проверить работу .strip().replace(' ', '')
+    update_mock.message.text = " 14:00 - 16:30 "
+    update_mock.effective_user.id = 12345
+    
+    # Точечно делаем reply_text асинхронным
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+    test_date = datetime.date(2026, 10, 14)
+    # Кладём в ОЗУ дату, которую "выбрали" на предыдущем шаге
+    context_mock.user_data = {'selected_date': test_date}
+
+    # Стандартный шашлык для контекстного менеджера БД
+    connection_mock = MagicMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+
+    # 2. ВЫЗОВ ХЭНДЛЕРА
+    result = await handle_time_input_interval(update_mock, context_mock)
+
+    # 3. ПРОВЕРКИ
+    expected_start = datetime.time(14, 0)
+    expected_end = datetime.time(16, 30)
+
+    # Убеждаемся, что хэндлер правильно распарсил время и передал его в проверку конфликтов
+    mock_has_conflict.assert_called_once_with(
+        connection_mock,
+        12345,
+        test_date,
+        expected_start,
+        expected_end
+    )
+
+    # Убеждаемся, что распарсенное время сохранилось в кэш для следующих шагов
+    assert context_mock.user_data['start_time'] == expected_start
+    assert context_mock.user_data['end_time'] == expected_end
+
+    # Проверяем, что бот ответил правильным текстом
+    update_mock.message.reply_text.assert_called_once()
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+    assert "Время начала: 14:00" in kwargs['text']
+    assert "Время окончания: 16:30" in kwargs['text']
+    assert "Укажите название мероприятия" in kwargs['text']
+
+    # Гарантируем переход на следующий стейт
+    assert result == WAITING_FOR_TITLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("input_text, db_conflict, expected_error_fragment", [
+    # 1. Провал регулярки
+    ("абвгд", False, "Неверный формат времени"),
+    # 2. Несуществующее время (ValueError)
+    ("25:00-26:00", False, "некорректное время суток"),
+    # 3. Конец раньше начала
+    ("16:00-14:00", False, "время начала не может быть позже"),
+    # 4. Конфликт в базе данных
+    ("14:00-16:00", True, "это время занято"),
+])
+@patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')
+async def test_handle_time_input_interval_negative(
+    mock_has_conflict: AsyncMock,
+    input_text: str,
+    db_conflict: bool,
+    expected_error_fragment: str
+):
+    # 1. ПОДГОТОВКА
+    mock_has_conflict.return_value = db_conflict
+
+    update_mock = AsyncMock()
+    # Подставляем текст из параметров
+    update_mock.message.text = input_text
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+    context_mock.user_data = {'selected_date': datetime.date(2026, 10, 14)}
+
+    connection_mock = MagicMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+
+    # 2. ВЫЗОВ
+    result = await handle_time_input_interval(update_mock, context_mock)
+
+    # 3. ПРОВЕРКИ
+    # Проверяем, что во всех негативных сценариях мы остаемся на том же стейте
+    assert result == WAITING_FOR_TIME_INPUT_INTERVAL
+
+    # Проверяем, что бот ответил сообщением
+    update_mock.message.reply_text.assert_called_once()
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+    
+    # Проверяем, что в ответе есть нужный кусок текста ошибки из параметров
+    assert expected_error_fragment in kwargs['text']
+
+    # Если мы тестируем БД-конфликт, проверяем, что запрос вообще ушел
+    if db_conflict:
+        mock_has_conflict.assert_called_once()
+    else:
+        # Для ошибок валидации база дергаться не должна
+        mock_has_conflict.assert_not_called()

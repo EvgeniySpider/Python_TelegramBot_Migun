@@ -1,5 +1,4 @@
 from asyncpg import Record
-from typing import Union, List
 from datetime import time
 
 
@@ -11,7 +10,7 @@ def format_event_time(start_time: time, end_time: time) -> str:
     return f"{st} - {end}"
 
 
-def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = False) -> str:
+def build_events_list_text(events: list[Record | dict], numbered: bool = False) -> str:
     """
     Генерирует текстовый список событий.
     Безопасно обрабатывает события на весь день (у которых start_time равен None).
@@ -39,7 +38,7 @@ def build_events_list_text(events: List[Union[Record, dict]], numbered: bool = F
 
 
 def build_detailed_event_text(
-    events: List[Union[Record, dict]],
+    events: list[Record | dict],
     index: int = 0,
     numbered: bool = False,
     is_show_date: bool = False

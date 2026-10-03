@@ -1,4 +1,5 @@
 import datetime
+import asyncpg
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -45,7 +46,7 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
 
     # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
-        event_text_record = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
+        event_text_record: list[asyncpg.Record] = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
         context.user_data['event_text_record'] = event_text_record
         event_count = len(event_text_record)
         if not event_text_record:

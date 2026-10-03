@@ -1,5 +1,4 @@
 import asyncpg
-from typing import List
 import datetime
 
 
@@ -12,7 +11,7 @@ class CalendarRepository:
         user_id: int,
         year: int,
         month: int
-    ) -> List[asyncpg.Record]:
+    ) -> list[asyncpg.Record]:
         """
         Вытаскивает из БД список дней месяца с их статусом занятости ('full' или 'partial').
         """
@@ -39,7 +38,7 @@ class CalendarRepository:
         conn: asyncpg.Connection,
         user_id: int,
         event_date: datetime.date
-    ) -> List[asyncpg.Record]:
+    ) -> list[asyncpg.Record]:
         """
         Вытаскивает все события пользователя на конкретную дату.
         Возвращает список Record-объектов со всеми полями.

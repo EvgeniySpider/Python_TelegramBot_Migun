@@ -2,11 +2,18 @@ import pytest
 import datetime
 from unittest.mock import patch, AsyncMock, MagicMock
 
+from telegram import InlineKeyboardMarkup
+
 
 from app.handlers.calendar_callbacks import handle_calendar_click
-from app.handlers.calendar_set_event import handle_time_input_interval
-from app.handlers.states import CHOOSING_ACTION, CHOOSING_TIME, WAITING_FOR_TITLE, WAITING_FOR_TIME_INPUT_INTERVAL
-
+from app.handlers.calendar_set_event import handle_time_input_interval, handle_title_input
+from app.handlers.states import (
+    CHOOSING_ACTION,
+    CHOOSING_TIME,
+    WAITING_FOR_TITLE,
+    WAITING_FOR_TIME_INPUT_INTERVAL,
+    WAITING_FOR_DESC_CHOICE
+)
 
 @pytest.mark.asyncio
 @patch('app.handlers.calendar_callbacks.CalendarRepository.get_events_by_date')
@@ -237,3 +244,52 @@ async def test_handle_time_input_interval_negative(
     else:
         # Для ошибок валидации база дергаться не должна
         mock_has_conflict.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_title_input():
+    update_mock = MagicMock()
+    context_mock = MagicMock()
+    title = 'Погулять с хорошим мальчиком'
+    update_mock.message.text = title
+
+  
+    update_mock.message.reply_text = AsyncMock()
+    context_mock.user_data = {}
+
+    result = await handle_title_input(update_mock, context_mock)
+
+    # Проверка что вернулся правильный state
+    assert result == WAITING_FOR_DESC_CHOICE
+
+    # Проверка что метод reply_text был вызван 1 раз
+    update_mock.message.reply_text.assert_called_once()
+
+    # Достаём все kwargs-ы из reply_text
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+
+    # Проверяем что название события лежит в сообщении пользователю
+    assert title in kwargs['text']
+
+    # Проверяем что в контекст было записано название события
+    assert context_mock.user_data['event_title'] == title
+
+    # Обращение к первой строке [0], первой кнопке [0]
+    assert kwargs['reply_markup'].inline_keyboard[0][0].callback_data == "desc_yes"
+    assert kwargs['reply_markup'].inline_keyboard[0][0].text == "✅ Да"
+
+    # Обращение к первой строке [0], второй кнопке [1]
+    assert kwargs['reply_markup'].inline_keyboard[0][1].callback_data == "desc_no"
+    assert kwargs['reply_markup'].inline_keyboard[0][1].text == "❌ Нет"
+        
+
+
+
+
+
+
+
+
+    
+
+    

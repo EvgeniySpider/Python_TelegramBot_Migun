@@ -2,14 +2,12 @@ import pytest
 import datetime
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from telegram import InlineKeyboardMarkup
-
-
 from app.handlers.calendar_callbacks import handle_calendar_click
-from app.handlers.calendar_set_event import handle_time_input_interval, handle_title_input
+from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_TIME,
+    WAITING_FOR_DESCRIPTION,
     WAITING_FOR_TITLE,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_DESC_CHOICE
@@ -283,9 +281,40 @@ async def test_handle_title_input():
     assert kwargs['reply_markup'].inline_keyboard[0][1].text == "❌ Нет"
         
 
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_set_event._save_event_to_db')
+async def test_handle_cancel_add_description(mock_save_event_to_db: AsyncMock):
+    # state который возвращается в случае callback data 'desc_no'
+    mock_save_event_to_db.return_value = CHOOSING_ACTION
+
+    update_mock = AsyncMock()
+    context_mock = MagicMock()
+
+    update_mock.callback_query.data = 'desc_no'
+    context_mock.user_data = {}
+
+    result: int = await handle_desc_choice(update_mock, context_mock)
+    # Все проверки
+    assert result == CHOOSING_ACTION
+    update_mock.callback_query.answer.assert_awaited_once()
+    assert context_mock.user_data['description'] is None
+    mock_save_event_to_db.assert_called_once_with(update_mock, context_mock)
 
 
+@pytest.mark.asyncio
+async def test_handle_approve_add_description():
+    update_mock = AsyncMock()
+    context_mock = MagicMock()
 
+    update_mock.callback_query.data = 'desc_yes'
+
+    result: int = await handle_desc_choice(update_mock, context_mock)
+
+    # Все проверки
+    assert result == WAITING_FOR_DESCRIPTION 
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    assert '📝 Введите текст описания (заметки) для мероприятия:'\
+        in update_mock.callback_query.edit_message_text.call_args.kwargs['text']
 
 
 

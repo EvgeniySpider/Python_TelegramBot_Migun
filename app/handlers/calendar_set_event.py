@@ -237,7 +237,7 @@ async def handle_description_input(update: Update, context: ContextTypes.DEFAULT
     return state
 
 
-async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
 
     selected_date = context.user_data.get('selected_date')

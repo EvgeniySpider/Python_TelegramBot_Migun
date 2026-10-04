@@ -7,6 +7,7 @@ from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
 from app.handlers.states import (
     CHOOSING_TIME,
+    WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_TITLE
 )
@@ -248,3 +249,32 @@ async def test_handle_set_event_all_day_busy_day():
     assert kwargs['show_alert'] is False
 
     update_mock.callback_query.edit_message_text.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_set_event_exact_busy_day():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "some_prefix:exact"
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    context_mock = MagicMock()
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record':  [
+            {'title': 'Уборка', 'start_time': time(8, 0), 'end_time': time(9, 0), 'event_type': 'interval'}
+        ],
+    }
+
+    result = await handle_set_event(update_mock, context_mock)
+
+    assert result == WAITING_FOR_TIME_INPUT_EXACT
+    assert context_mock.user_data['event_type'] == 'exact'
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+
+    assert 'Выбрана дата: 20.10.2026' in kwargs['text']
+    assert 'Запланированные дела:' in kwargs['text']
+    assert '08:00 - 09:00 Уборка' in kwargs['text'] # Событие которое есть в этом дне (events_text)
+    assert 'Тип события: [ ⏱️ Точное время ]' in kwargs['text'] # Тип события которое добавляем

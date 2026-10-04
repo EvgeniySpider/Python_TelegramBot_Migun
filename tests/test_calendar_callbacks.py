@@ -411,7 +411,7 @@ async def test_handle_time_input_exact_negative(
 
     # Проверяем, что бот ответил сообщением
     update_mock.message.reply_text.assert_called_once()
-    kwargs = update_mock.message.reply_text.call_args.kwargs
+    kwargs: dict = update_mock.message.reply_text.call_args.kwargs
 
     assert expected_error_fragment in kwargs['text']
 
@@ -421,3 +421,39 @@ async def test_handle_time_input_exact_negative(
     else:
         # Для ошибок валидации база дергаться не должна
         mock_has_conflict.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')
+async def test_handle_time_input_exact_midnight_boundary(mock_has_conflict: AsyncMock):
+    mock_has_conflict.return_value = False
+    update_mock = AsyncMock()
+    update_mock.message.text = " 23:50 "
+    update_mock.effective_user.id = 12345
+    
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+    test_date = datetime.date(2026, 10, 20)
+
+    context_mock.user_data = {'selected_date': test_date}
+
+    # Стандартный шашлык для контекстного менеджера БД
+    connection_mock = MagicMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+
+    result: int = await handle_time_input_exact(update_mock, context_mock)
+
+    assert result == WAITING_FOR_TITLE
+    start_time = datetime.time(23, 50)
+    end_time = datetime.time(23, 59, 59)
+
+    args: tuple = mock_has_conflict.call_args.args
+
+    assert start_time == args[-2]
+    assert end_time == args[-1]
+
+    assert 'Время окончания (авто): 23:59' in update_mock.message.reply_text.call_args.kwargs['text']
+
+    assert context_mock.user_data['start_time'] == start_time
+    assert context_mock.user_data['end_time'] == end_time

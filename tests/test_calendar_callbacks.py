@@ -3,7 +3,7 @@ import datetime
 from unittest.mock import patch, AsyncMock, MagicMock
 
 from app.handlers.calendar_callbacks import handle_calendar_click
-from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_interval, handle_title_input
+from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_TIME,
@@ -317,8 +317,55 @@ async def test_handle_approve_add_description():
         in update_mock.callback_query.edit_message_text.call_args.kwargs['text']
 
 
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')
+async def test_handle_time_input_exact_success(mock_has_conflict: AsyncMock):
+    # ПОДГОТОВКА МОКОВ
+    # Имитируем, что выбранное время свободно (нет конфликтов)
+    mock_has_conflict.return_value = False
 
-
+    update_mock = AsyncMock()
+    # Имитируем текстовое сообщение от пользователя. 
+    # Специально добавляем пробелы, чтобы проверить работу .strip().replace(' ', '')
+    update_mock.message.text = " 12:30 "
+    update_mock.effective_user.id = 12345
     
+    # Точечно делаем reply_text асинхронным
+    update_mock.message.reply_text = AsyncMock()
 
-    
+    context_mock = MagicMock()
+    test_date = datetime.date(2026, 10, 20)
+    # Кладём в ОЗУ дату, которую "выбрали" на предыдущем шаге
+    context_mock.user_data = {'selected_date': test_date}
+
+    # Стандартный шашлык для контекстного менеджера БД
+    connection_mock = MagicMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+
+    result: int = await handle_time_input_exact(update_mock, context_mock)
+
+    # ПРОВЕРКИ
+    expected_start = datetime.time(12, 30)
+    expected_end = datetime.time(13)
+
+    # Убеждаемся, что хэндлер правильно распарсил время и передал его в проверку конфликтов
+    mock_has_conflict.assert_called_once_with(
+        connection_mock,
+        12345,
+        test_date,
+        expected_start,
+        expected_end
+    )
+
+    # Сохранения времени в КЭШ для следующего шага
+    assert context_mock.user_data['start_time'] == expected_start
+    assert context_mock.user_data['end_time'] == expected_end
+
+    # Проверяем, что бот ответил правильным текстом
+    update_mock.message.reply_text.assert_called_once()
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+    assert "Время начала: 12:30" in kwargs['text']
+    assert "Время окончания (авто): 13:00" in kwargs['text']
+    assert "Укажите название мероприятия" in kwargs['text']
+
+    assert result == WAITING_FOR_TITLE

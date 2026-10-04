@@ -1,7 +1,9 @@
 import pytest
 import datetime
 from unittest.mock import patch, AsyncMock, MagicMock
+from datetime import date, time
 
+from app.handlers.calendar_act_with_options import handle_options_click
 from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
@@ -457,3 +459,70 @@ async def test_handle_time_input_exact_midnight_boundary(mock_has_conflict: Asyn
 
     assert context_mock.user_data['start_time'] == start_time
     assert context_mock.user_data['end_time'] == end_time
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_create_full_day():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_create"
+    
+    context_mock = MagicMock()
+    # Имитируем, что день полностью забит ('full')
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'month_busy_days': {20: 'full'}
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    # Проверяем, что хэндлер отбил нас назад
+    assert result == CHOOSING_ACTION
+    
+    # Проверяем текст алерта
+    update_mock.callback_query.answer.assert_awaited_once()
+    kwargs = update_mock.callback_query.answer.call_args.kwargs
+    assert '❌ Ошибка: этот день полностью занят' in kwargs['text']
+    assert kwargs['show_alert'] is False
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_callbacks.generate_time_options_keyboard')
+async def test_handle_options_click_create_success(mock_keyboard):
+    mock_keyboard.return_value = "fake_keyboard"
+    
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_create"
+    
+    context_mock = MagicMock()
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'month_busy_days': {}, # Нет метки 'full'
+        'event_text_record': [
+            {'title': 'Уборка', 'start_time': time(8, 0), 'end_time': time(9, 0), 'event_type': 'interval'}
+        ]
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    # Проверяем успешный переход к выбору типа времени
+    assert result == CHOOSING_TIME
+    
+    # Проверяем, что алерт об ошибке не вызывался
+    update_mock.callback_query.answer.assert_not_called()
+    
+    # Проверяем, что текст изменился через функцию handle_time_selection_option
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    # Проверяем интеграцию всех частей: даты, списка событий и текста-инструкции
+    assert '📅 *Выбранная дата*: 20.10.2026' in kwargs['text']
+    assert '08:00 - 09:00 Уборка' in kwargs['text'] # Убеждаемся, что build_events_list_text вшил заметку
+    assert 'Укажите формат времени проведения события:' in kwargs['text']
+    
+    # Убеждаемся, что клавиатура прикрепилась и формат Markdown включен
+    assert kwargs['reply_markup'] == "fake_keyboard"
+    assert kwargs['parse_mode'] == "Markdown"
+    
+    # Проверяем, что в клавиатуру ушел правильный флаг is_adding=True
+    mock_keyboard.assert_called_once_with(True)

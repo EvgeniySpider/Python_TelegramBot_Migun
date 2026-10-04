@@ -8,6 +8,7 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_TIME,
     WAITING_FOR_DESCRIPTION,
+    WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TITLE,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_DESC_CHOICE
@@ -369,3 +370,54 @@ async def test_handle_time_input_exact_success(mock_has_conflict: AsyncMock):
     assert "Укажите название мероприятия" in kwargs['text']
 
     assert result == WAITING_FOR_TITLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("input_text, db_conflict, expected_error_fragment", [
+    # 1. Провал регулярки
+    ("абвгд", False, "Неверный формат времени"),
+    # 2. Несуществующее время (ValueError)
+    ("25:00", False, "некорректное время суток"),
+    # 3. Конфликт в базе данных
+    ("14:00", True, "это время занято"),
+])
+@patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')
+async def test_handle_time_input_exact_negative(
+    mock_has_conflict: AsyncMock,
+    input_text: str,
+    db_conflict: bool,
+    expected_error_fragment: str
+):
+    # 1. ПОДГОТОВКА
+    mock_has_conflict.return_value = db_conflict
+
+    update_mock = AsyncMock()
+    # Подставляем текст из параметров
+    update_mock.message.text = input_text
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+    context_mock.user_data = {'selected_date': datetime.date(2026, 10, 20)}
+
+    connection_mock = MagicMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+
+    # 2. ВЫЗОВ
+    result = await handle_time_input_exact(update_mock, context_mock)
+
+    # 3. ПРОВЕРКИ
+    # Проверяем, что во всех негативных сценариях мы остаемся на том же стейте
+    assert result == WAITING_FOR_TIME_INPUT_EXACT
+
+    # Проверяем, что бот ответил сообщением
+    update_mock.message.reply_text.assert_called_once()
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+
+    assert expected_error_fragment in kwargs['text']
+
+    # Если мы тестируем БД-конфликт, проверяем, что запрос вообще ушел
+    if db_conflict:
+        mock_has_conflict.assert_called_once()
+    else:
+        # Для ошибок валидации база дергаться не должна
+        mock_has_conflict.assert_not_called()

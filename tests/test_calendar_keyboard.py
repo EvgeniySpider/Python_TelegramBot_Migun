@@ -1,11 +1,15 @@
-from datetime import datetime, date
+from datetime import datetime, date, time
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
-from app.handlers.states import WAITING_FOR_TIME_INPUT_INTERVAL
+from app.handlers.states import (
+    CHOOSING_TIME,
+    WAITING_FOR_TIME_INPUT_INTERVAL,
+    WAITING_FOR_TITLE
+)
 
 
 def test_generate_calendar_keyboard_complex_state():
@@ -176,7 +180,7 @@ async def test_handle_set_event_interval_free_day():
     assert context_mock.user_data['event_type'] == 'interval'
 
     # 2. Проверяем, что текст изменился и содержит нужные куски интерфейса
-    update_mock.callback_query.edit_message_text.assert_called_once()
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
     
     assert "Выбрана дата: 21.10.2026" in kwargs['text']
@@ -186,3 +190,61 @@ async def test_handle_set_event_interval_free_day():
 
     # 3. Гарантируем, что ConversationHandler получил команду ждать время
     assert result == WAITING_FOR_TIME_INPUT_INTERVAL
+
+
+@pytest.mark.asyncio
+async def test_handle_set_event_all_day_free_day():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "some_prefix:all_day"
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    context_mock = MagicMock()
+    # Имитируем состояние ОЗУ после клика по свободному дню
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [] # День полностью свободен
+    }
+
+    # ВЫЗОВ
+    result = await handle_set_event(update_mock, context_mock)
+
+    assert result == WAITING_FOR_TITLE
+
+    assert context_mock.user_data['event_type'] == 'all_day'
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+
+    assert 'Выбрана дата: 20.10.2026' in kwargs['text']
+    assert 'Тип события: [ ☀️ Весь день ]' in kwargs['text']
+    assert 'Укажите название мероприятия:' in kwargs['text']
+    assert 'Например: [Поездка на дачу]' in kwargs['text']
+
+
+@pytest.mark.asyncio
+async def test_handle_set_event_all_day_busy_day():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "some_prefix:all_day"
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    context_mock = MagicMock()
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record':  [
+            {'title': 'Уборка', 'start_time': time(8, 0), 'end_time': time(9, 0), 'event_type': 'interval'}
+        ],
+        'month_busy_days': {20: 'interval'}
+    }
+
+    result = await handle_set_event(update_mock, context_mock)
+
+    assert result == CHOOSING_TIME
+    update_mock.callback_query.answer.assert_awaited_once()
+
+    kwargs: dict = update_mock.callback_query.answer.call_args.kwargs
+    assert '❌ Ошибка: этот день частично занят' in kwargs['text']
+    assert 'Выберите другую дату' in kwargs['text']
+    assert kwargs['show_alert'] is False
+
+    update_mock.callback_query.edit_message_text.assert_not_called()

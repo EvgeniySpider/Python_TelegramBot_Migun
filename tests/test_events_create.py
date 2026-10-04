@@ -6,7 +6,8 @@ from rest_framework import status
 from unittest.mock import patch, MagicMock, AsyncMock, ANY
 from datetime import date, time
 
-from app.handlers.calendar_set_event import _save_event_to_db
+from app.handlers.calendar_set_event import _save_event_to_db, handle_description_input
+from app.handlers.states import CHOOSING_ACTION
 from events.models import Event, User
 
 
@@ -323,3 +324,26 @@ async def test_save_event_to_db(
     # Блок 5: Возврат стейта
     mock_handle_back.assert_called_once_with(update_mock, context_mock)
     assert result == "SOME_STATE"
+
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_set_event._save_event_to_db')
+async def test_apply_description_input_before_saving_to_db(mock_save_event_to_db: AsyncMock):
+    # Преамбула данных
+    mock_save_event_to_db.return_value = CHOOSING_ACTION
+    update_mock = MagicMock()
+    context_mock = MagicMock()
+    description = 'Описание для заметки'
+
+    # Фабула данных
+    context_mock.user_data = {}
+    update_mock.message.text = description
+
+    # Вызов подопытного
+    result = await handle_description_input(update_mock, context_mock)
+
+    # Тесты
+    assert result == CHOOSING_ACTION
+    assert context_mock.user_data['description'] == description
+    mock_save_event_to_db.assert_awaited_once_with(update_mock, context_mock)

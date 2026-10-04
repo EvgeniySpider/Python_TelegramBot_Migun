@@ -236,7 +236,7 @@ async def handle_description_input(update: Update, context: ContextTypes.DEFAULT
     state = await _save_event_to_db(update, context)
     return state
 
-
+# ВОТ ОНА:
 async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
 

@@ -15,8 +15,11 @@ from app.handlers.states import (
     CHOOSING_TIME,
     CONFIRMING_DELETE,
     SELECTING_EDIT_EVENT,
+    SELECTING_INVITE_EVENT,
     TYPING_EDIT_NUM,
     TYPING_EVENT_NUMBER_TO_DELETE,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID,
     WAITING_FOR_DESCRIPTION,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TITLE,
@@ -950,3 +953,109 @@ async def test_handle_options_click_delete_too_many_events_text_input():
     
     assert keyboard[-1][1].text == '🔙 Назад'
     assert keyboard[-1][1].callback_data == 'del_num:cancel'
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_invite_one_event():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_invite"
+    
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': 301, 'title': 'Одиночная встреча', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'}
+        ]
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    assert result == TYPING_INVITEE_ID
+    
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    assert context_mock.user_data['invite_event_id'] == 301
+
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+
+    assert 'Выбрано событие: **Одиночная встреча**' in kwargs['text']
+    assert '**отправьте Telegram ID** пользователя, которого хотите пригласить:' in kwargs['text']
+
+    keyboard = kwargs['reply_markup'].inline_keyboard
+    
+    assert keyboard[0][0].text == '🔙 Назад'
+    assert keyboard[0][0].callback_data == 'cancel_invite'
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_invite_multiple_events_inline():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_invite"
+    
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': 301, 'title': 'Встреча 1', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'},
+            {'id': 302, 'title': 'Встреча 2', 'start_time': time(12, 0), 'end_time': time(13, 0), 'event_type': 'interval'}
+        ]
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    assert result == SELECTING_INVITE_EVENT
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    # Проверяем текст из show_event_selection_list
+    assert 'Выберите номер события для назначения встречи:' in kwargs['text']
+
+    keyboard = kwargs['reply_markup'].inline_keyboard
+    
+    # Проверяем кнопки-номера с префиксом invite_num
+    assert keyboard[0][0].text == '1'
+    assert keyboard[0][0].callback_data == 'invite_num:0'
+    
+    # Убеждаемся, что в сервисном ряду ТОЛЬКО кнопка "Назад" (без "Удалить всё")
+    assert len(keyboard[-1]) == 1
+    assert keyboard[-1][0].text == '🔙 Назад'
+    assert keyboard[-1][0].callback_data == 'invite_num:cancel'
+
+
+# --- ТЕСТ 3: Приглашение (более 10 заметок, ввод текстом) ---
+
+@pytest.mark.asyncio
+async def test_handle_options_click_invite_too_many_events_text_input():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_invite"
+    
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': i, 'title': f'Массовая встреча {i}', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'}
+            for i in range(11)
+        ]
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    assert result == TYPING_INVITE_NUM
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    # Проверяем наличие текста-предупреждения и нужного промпта
+    assert '⚠️ Событий слишком много' in kwargs['text']
+    assert 'Отправьте номер события в чат, чтобы назначить на него встречу:' in kwargs['text']
+
+    keyboard = kwargs['reply_markup'].inline_keyboard
+    
+    # Убеждаемся, что инлайн-номера не сгенерировались
+    assert len(keyboard[0]) == 0
+    assert len(keyboard[1]) == 0
+    
+    # Кнопка "Назад" должна остаться
+    assert len(keyboard[-1]) == 1
+    assert keyboard[-1][0].text == '🔙 Назад'
+    assert keyboard[-1][0].callback_data == 'invite_num:cancel'

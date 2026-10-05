@@ -7,6 +7,7 @@ from telegram import InlineKeyboardMarkup
 
 from app.handlers.calendar_act_with_options import handle_options_click
 from app.handlers.calendar_callbacks import handle_calendar_click
+from app.handlers.calendar_edit_flow import handle_edit_event_by_text_number, handle_edit_event_selection
 from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
     CHOOSING_ACTION,
@@ -1059,3 +1060,83 @@ async def test_handle_options_click_invite_too_many_events_text_input():
     assert len(keyboard[-1]) == 1
     assert keyboard[-1][0].text == '🔙 Назад'
     assert keyboard[-1][0].callback_data == 'invite_num:cancel'
+
+
+
+# --- ТЕСТ 1: Позитивный сценарий выбора заметки через инлайн-кнопку ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.Appointment')
+@patch('app.handlers.calendar_edit_flow.is_user_invitee_for_event')
+async def test_handle_edit_event_selection_success(
+    mock_is_invitee: AsyncMock, 
+    mock_appointment: MagicMock
+):
+    mock_is_invitee.return_value = False
+    mock_appointment.objects.filter.return_value.aexists = AsyncMock(return_value=False)
+
+    update_mock = AsyncMock()
+    # Имитируем клик по второй кнопке (индекс 1)
+    update_mock.callback_query.data = "edit_num:1"
+    update_mock.effective_user.id = 12345
+
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': 10, 'title': 'Событие 0', 'start_time': time(9, 0), 'end_time': time(10, 0)},
+            {'id': 11, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0)}
+        ]
+    }
+
+    result = await handle_edit_event_selection(update_mock, context_mock)
+
+    assert result == CHOOSING_EDIT_FIELD
+
+    # Проверяем, что в context легли данные именно второй заметки (индекс 1)
+    assert context_mock.user_data['edit_event_index'] == 1
+    assert context_mock.user_data['edit_event_id'] == 11
+    assert context_mock.user_data['current_event_time'] == (time(10, 0), time(11, 0))
+
+    # Убеждаемся, что вызвано редактирование сообщения
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+
+
+# --- ТЕСТ 2: Позитивный сценарий выбора заметки через текстовый ввод ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.Appointment')
+@patch('app.handlers.calendar_edit_flow.is_user_invitee_for_event')
+@patch('app.handlers.calendar_edit_flow.get_validated_event_index')
+async def test_handle_edit_event_by_text_number_success(
+    mock_get_validated: AsyncMock,
+    mock_is_invitee: AsyncMock, 
+    mock_appointment: MagicMock
+):
+    event_list = [
+        {'id': 10, 'title': 'Событие 0', 'start_time': time(9, 0), 'end_time': time(10, 0)},
+        {'id': 11, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0)}
+    ]
+    
+    # Мокаем успешный возврат валидатора: (is_valid=True, index=1, event_list)
+    mock_get_validated.return_value = (True, 1, event_list)
+    mock_is_invitee.return_value = False
+    mock_appointment.objects.filter.return_value.aexists = AsyncMock(return_value=False)
+
+    update_mock = AsyncMock()
+    update_mock.effective_user.id = 12345
+
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20)
+    }
+
+    result = await handle_edit_event_by_text_number(update_mock, context_mock)
+
+    assert result == CHOOSING_EDIT_FIELD
+
+    # Снова проверяем, что контекст обновился данными заметки №1
+    assert context_mock.user_data['edit_event_index'] == 1
+    assert context_mock.user_data['edit_event_id'] == 11
+    assert context_mock.user_data['current_event_time'] == (time(10, 0), time(11, 0))
+
+    # Здесь уже не edit_message_text, а reply_text, так как это ответ на сообщение
+    update_mock.message.reply_text.assert_awaited_once()

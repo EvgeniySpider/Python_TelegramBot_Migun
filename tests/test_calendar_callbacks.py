@@ -8,6 +8,7 @@ from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
     CHOOSING_ACTION,
+    CHOOSING_EDIT_FIELD,
     CHOOSING_TIME,
     WAITING_FOR_DESCRIPTION,
     WAITING_FOR_TIME_INPUT_EXACT,
@@ -609,3 +610,76 @@ async def test_handle_options_click_edit_one_event_is_organizer(
     update_mock.callback_query.answer.assert_awaited_once()
     arg = update_mock.callback_query.answer.call_args.args[0]
     assert "Нельзя редактировать встречу на которую Вы пригласили людей" in arg
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_act_with_options.Appointment')
+@patch('app.handlers.calendar_act_with_options.is_user_invitee_for_event')
+
+async def test_handle_options_click_edit_one_event(
+    mock_is_invitee: AsyncMock,
+    mock_appointment: MagicMock
+):
+    mock_is_invitee.return_value = False
+
+    aexists_mock = AsyncMock(return_value=False)
+    mock_appointment.objects.filter.return_value.aexists = aexists_mock
+
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_edit"
+    update_mock.effective_user.id = 12345
+
+    context_mock = MagicMock()
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': 102, 'title': 'Встреча 2', 'start_time': time(12, 0), 'end_time': time(13, 0), 'event_type': 'interval'}
+        ]
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    assert result == CHOOSING_EDIT_FIELD
+
+    mock_is_invitee.assert_called_once_with(
+        user_id = 12345,
+        selected_date = date(2026, 10, 20),
+        start_time = time(12, 0),
+        end_time = time(13, 0)
+    )
+
+    # Убеждаемся что query.answer не вызывался
+    update_mock.callback_query.answer.assert_not_awaited()
+
+    # Проверяем что в контекст записались все поля для следующего шага
+    assert context_mock.user_data['current_event_time'] == (time(12, 0), time(13, 0))
+    assert context_mock.user_data['edit_event_id'] == 102
+    assert context_mock.user_data['edit_event_index'] == 0
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    text = kwargs['text']
+    reply_markup = kwargs['reply_markup']
+    parse_mode = kwargs['parse_mode']
+
+    # 1. Проверяем парсинг текста (ключевые маркеры)
+    assert 'У вас 1 заметка. Выберите опцию' in text
+    assert '📌 *Название*: Встреча 2' in text
+    assert '⏳ *Время*: 12:00 - 13:00' in text
+    
+    # 2. Проверяем режим разметки
+    assert parse_mode == 'Markdown'
+
+    # 3. Проверяем клавиатуру (структуру и callback_data)
+    # Убеждаемся, что это двухмерный кортеж/список кнопок
+    keyboard = reply_markup.inline_keyboard
+    
+    # Проверяем первую кнопку (Название)
+    assert keyboard[0][0].callback_data == 'edit_field:title'
+    assert keyboard[0][0].text == '✏️ Название'
+    
+    # Проверяем кнопку отмены (последняя строка, первая кнопка)
+    assert keyboard[-1][0].callback_data == 'edit_field:cancel'
+    assert keyboard[-1][0].text == '🔙 Назад'

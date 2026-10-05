@@ -3,15 +3,20 @@ import datetime
 from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import date, time
 
+from telegram import InlineKeyboardMarkup
+
 from app.handlers.calendar_act_with_options import handle_options_click
 from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_EDIT_FIELD,
+    CHOOSING_EVENT_TO_DELETE,
     CHOOSING_TIME,
+    CONFIRMING_DELETE,
     SELECTING_EDIT_EVENT,
     TYPING_EDIT_NUM,
+    TYPING_EVENT_NUMBER_TO_DELETE,
     WAITING_FOR_DESCRIPTION,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TITLE,
@@ -663,7 +668,7 @@ async def test_handle_options_click_edit_one_event(
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
     
     text = kwargs['text']
-    reply_markup = kwargs['reply_markup']
+    reply_markup: InlineKeyboardMarkup = kwargs['reply_markup']
     parse_mode = kwargs['parse_mode']
 
     # 1. Проверяем парсинг текста (ключевые маркеры)
@@ -715,7 +720,7 @@ async def test_handle_options_click_edit_multiple_events_inline():
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
     
     text = kwargs['text']
-    reply_markup = kwargs['reply_markup']
+    reply_markup: InlineKeyboardMarkup = kwargs['reply_markup']
     parse_mode = kwargs['parse_mode']
 
     # 1. Проверяем текст (присутствие промпта и данных обеих заметок)
@@ -771,7 +776,7 @@ async def test_handle_options_click_edit_too_many_events_text_input():
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
     
     text = kwargs['text']
-    reply_markup = kwargs['reply_markup']
+    reply_markup: InlineKeyboardMarkup = kwargs['reply_markup']
     parse_mode = kwargs['parse_mode']
 
     # 1. Проверяем текст
@@ -793,3 +798,155 @@ async def test_handle_options_click_edit_too_many_events_text_input():
     # Кнопка "Назад" должна лежать в последнем ряду
     assert keyboard[-1][0].text == '🔙 Назад'
     assert keyboard[-1][0].callback_data == 'edit_num:cancel'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event_type, expected_first_sent",
+    [
+        ('interval', 'мероприятие?'),
+        ('all_day', 'мероприятие на весь день?')
+    ]
+)
+@patch('app.handlers.calendar_act_with_options.confirm_to_delete')
+async def test_handle_options_click_delete_one_event_various_types(
+    mock_confirm_to_delete: AsyncMock,
+    event_type: str,
+    expected_first_sent: str
+):
+    # ПОДГОТОВКА
+    # Мокаем возвращаемый стейт из фабричного хэндлера
+    mock_confirm_to_delete.return_value = CONFIRMING_DELETE
+    
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_delete"
+    
+    test_date = date(2026, 10, 20)
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': test_date,
+        'event_text_record': [
+            {'id': 777, 'title': 'Ненужная встреча', 'event_type': event_type}
+        ]
+    }
+
+    # ВЫЗОВ
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    # ПРОВЕРКИ
+    # 1. Проверяем возвращаемый стейт
+    assert result == CONFIRMING_DELETE
+
+    # 2. Проверяем, что в context.user_data записались правильные данные для удаления
+    assert context_mock.user_data['delete_event_id'] == 777
+    assert context_mock.user_data['column_name'] == 'id'
+
+    # 3. Проверяем вызов внешней функции confirm_to_delete с точными аргументами
+    # В зависимости от типа мероприятие текст меняется, проверяем это
+    mock_confirm_to_delete.assert_awaited_once_with(
+        update_mock.callback_query,
+        '📌 *Событие*: Ненужная встреча\n',
+        test_date,
+        (expected_first_sent, 'заметку.')
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_delete_multiple_events_inline():
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_delete"
+    
+    context_mock = MagicMock()
+    # Кладем 2 события, чтобы сработал show_event_selection_list
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': 101, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'},
+            {'id': 102, 'title': 'Событие 2', 'start_time': time(12, 0), 'end_time': time(13, 0), 'event_type': 'interval'}
+        ]
+    }
+
+    result: int = await handle_options_click(update_mock, context_mock)
+
+    # Стейт для удаления из списка (до 10 заметок)
+    assert result == CHOOSING_EVENT_TO_DELETE
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    text = kwargs['text']
+    reply_markup: InlineKeyboardMarkup = kwargs['reply_markup']
+
+    # Проверяем текст (промпт для удаления и вывод самих заметок)
+    assert 'Выберите номер события для удаления:' in text
+    assert 'Событие 1' in text
+    assert 'Событие 2' in text
+
+    keyboard = reply_markup.inline_keyboard
+    
+    # 1. Проверяем цифровые кнопки с префиксом del_num
+    assert keyboard[0][0].text == '1'
+    assert keyboard[0][0].callback_data == 'del_num:0'
+    assert keyboard[0][1].text == '2'
+    assert keyboard[0][1].callback_data == 'del_num:1'
+    
+    # 2. Проверяем сервисный нижний ряд
+    # Должна появиться кнопка "Удалить всё" (так как action == "delete") и кнопка "Назад"
+    assert keyboard[-1][0].text == '❌ Удалить всё'
+    assert keyboard[-1][0].callback_data == 'del_num:everything'
+    
+    assert keyboard[-1][1].text == '🔙 Назад'
+    assert keyboard[-1][1].callback_data == 'del_num:cancel'
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_delete_too_many_events_text_input():
+    # ПОДГОТОВКА
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_delete"
+    
+    context_mock = MagicMock()
+    
+    # Генерируем 11 событий для срабатывания третьего сценария
+    event_list = [
+        {'id': i, 'title': f'Событие под снос {i}', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'}
+        for i in range(11)
+    ]
+    
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': event_list
+    }
+
+    # ВЫЗОВ
+    result = await handle_options_click(update_mock, context_mock)
+
+    # ПРОВЕРКИ
+    # Проверяем стейт (СЦЕНАРИЙ 3 для delete)
+    assert result == TYPING_EVENT_NUMBER_TO_DELETE
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    text = kwargs['text']
+    reply_markup: InlineKeyboardMarkup = kwargs['reply_markup']
+
+    # 1. Проверяем текст (предупреждение и правильный промпт)
+    assert '⚠️ Событий слишком много для отображения кнопок-номеров.' in text
+    assert 'Отправьте номер события в чат, чтобы его удалить:' in text
+    assert 'Событие под снос 0' in text
+    assert 'Событие под снос 10' in text
+
+    # 2. Проверяем клавиатуру
+    keyboard = reply_markup.inline_keyboard
+    
+    # Номеров быть не должно
+    assert len(keyboard[0]) == 0
+    assert len(keyboard[1]) == 0
+    
+    # Но сервисные кнопки "Удалить всё" и "Назад" должны быть на месте
+    assert keyboard[-1][0].text == '❌ Удалить всё'
+    assert keyboard[-1][0].callback_data == 'del_num:everything'
+    
+    assert keyboard[-1][1].text == '🔙 Назад'
+    assert keyboard[-1][1].callback_data == 'del_num:cancel'

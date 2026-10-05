@@ -10,6 +10,8 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_EDIT_FIELD,
     CHOOSING_TIME,
+    SELECTING_EDIT_EVENT,
+    TYPING_EDIT_NUM,
     WAITING_FOR_DESCRIPTION,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TITLE,
@@ -683,3 +685,111 @@ async def test_handle_options_click_edit_one_event(
     # Проверяем кнопку отмены (последняя строка, первая кнопка)
     assert keyboard[-1][0].callback_data == 'edit_field:cancel'
     assert keyboard[-1][0].text == '🔙 Назад'
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_edit_multiple_events_inline():
+    # ПОДГОТОВКА
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_edit"
+    
+    context_mock = MagicMock()
+    # Кладем 2 события, чтобы сработал сценарий event_count < 11
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': [
+            {'id': 101, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'},
+            {'id': 102, 'title': 'Событие 2', 'start_time': time(12, 0), 'end_time': time(13, 0), 'event_type': 'interval'}
+        ]
+    }
+
+    # ВЫЗОВ
+    result = await handle_options_click(update_mock, context_mock)
+
+    # ПРОВЕРКИ
+    # Проверяем стейт (СЦЕНАРИЙ 2 для edit -> SELECTING_EDIT_EVENT)
+    assert result == SELECTING_EDIT_EVENT
+
+    # Убеждаемся, что вызвалось редактирование сообщения
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    text = kwargs['text']
+    reply_markup = kwargs['reply_markup']
+    parse_mode = kwargs['parse_mode']
+
+    # 1. Проверяем текст (присутствие промпта и данных обеих заметок)
+    assert 'Выберите номер события для редактирования:' in text
+    assert 'Событие 1' in text
+    assert 'Событие 2' in text
+    assert parse_mode == 'Markdown'
+
+    # 2. Проверяем клавиатуру
+    keyboard = reply_markup.inline_keyboard
+    
+    # Первый ряд, первая кнопка
+    assert keyboard[0][0].text == '1'
+    assert keyboard[0][0].callback_data == 'edit_num:0'
+    
+    # Первый ряд, вторая кнопка
+    assert keyboard[0][1].text == '2'
+    assert keyboard[0][1].callback_data == 'edit_num:1'
+    
+    # Последний ряд (кнопка Назад, так как префикс edit_num, а не del_num)
+    assert keyboard[-1][0].text == '🔙 Назад'
+    assert keyboard[-1][0].callback_data == 'edit_num:cancel'
+
+
+@pytest.mark.asyncio
+async def test_handle_options_click_edit_too_many_events_text_input():
+    # ПОДГОТОВКА
+    update_mock = AsyncMock()
+    update_mock.callback_query.data = "action_edit"
+    
+    context_mock = MagicMock()
+    
+    # Генерируем 11 событий через list comprehension
+    event_list = [
+        {'id': i, 'title': f'Массовое событие {i}', 'start_time': time(10, 0), 'end_time': time(11, 0), 'event_type': 'interval'}
+        for i in range(11)
+    ]
+    
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'event_text_record': event_list
+    }
+
+    # ВЫЗОВ
+    result = await handle_options_click(update_mock, context_mock)
+
+    # ПРОВЕРКИ
+    # Проверяем стейт (СЦЕНАРИЙ 3 для edit -> TYPING_EDIT_NUM)
+    assert result == TYPING_EDIT_NUM
+
+    # Убеждаемся, что вызвалось редактирование сообщения
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    text = kwargs['text']
+    reply_markup = kwargs['reply_markup']
+    parse_mode = kwargs['parse_mode']
+
+    # 1. Проверяем текст
+    assert '⚠️ Событий слишком много для отображения кнопок-номеров.' in text
+    assert 'Отправьте номер события в чат, чтобы его изменить:' in text
+    # Проверяем, что первая и последняя заметки есть в тексте
+    assert 'Массовое событие 0' in text
+    assert 'Массовое событие 10' in text
+    
+    assert parse_mode == 'Markdown'
+
+    # 2. Проверяем клавиатуру (в ней не должно быть инлайн-номеров)
+    keyboard = reply_markup.inline_keyboard
+    
+    # Так как count=None, первые два массива кнопок (keyboard[0] и keyboard[1]) будут пустыми
+    assert len(keyboard[0]) == 0
+    assert len(keyboard[1]) == 0
+    
+    # Кнопка "Назад" должна лежать в последнем ряду
+    assert keyboard[-1][0].text == '🔙 Назад'
+    assert keyboard[-1][0].callback_data == 'edit_num:cancel'

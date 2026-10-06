@@ -285,7 +285,7 @@ async def test_handle_set_event_exact_busy_day():
 
 @pytest.mark.asyncio
 @patch('app.handlers.calendar_delete_event.handle_delete_confirmation')
-async def test_handle_cancel_delete_one_event(mock_handle_delete_confirmation: AsyncMock):
+async def test_handle_delete_choice_prepare_delete_all(mock_handle_delete_confirmation: AsyncMock):
     update_mock = MagicMock()
     context_mock = MagicMock()
 

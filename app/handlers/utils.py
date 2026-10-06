@@ -61,7 +61,12 @@ async def is_user_invitee_for_event(
     ).aexists()
 
 
-async def notify_and_cancel_appointments(user_id: int, column_name: str, value: Any, bot: ExtBot) -> None:
+async def notify_and_cancel_appointments(
+    user_id: int,
+    column_name: str,
+    value: Any,
+    bot: ExtBot
+) -> None:
     """
     Ищет удаляемые события пользователя и обрабатывает связанные встречи:
     - Если юзер организатор -> удаляет приглашения и копии у детей, уведомляет детей.

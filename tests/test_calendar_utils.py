@@ -1,5 +1,5 @@
 import datetime
-from datetime import date
+from datetime import date, time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_act_with_options import confirm_to_delete
 from app.handlers.states import CONFIRMING_DELETE
-from app.handlers.utils import get_validated_event_index
+from app.handlers.utils import get_validated_event_index, notify_and_cancel_appointments
+
 
 def test_build_detailed_event_text_basic():
     # 1. ПОДГОТОВКА ФЕЙКОВЫХ ДАННЫХ (Обычные словари)
@@ -224,3 +225,166 @@ async def test_confirm_to_delete_from_text_update(mock_gen_keyboard: AsyncMock):
     
     assert kwargs['reply_markup'] == "keyboard_mock"
     assert kwargs['parse_mode'] == "Markdown"
+
+
+
+# Вспомогательный класс для имитации асинхронного QuerySet из Django ORM
+class AsyncMockQuerySet:
+    def __init__(self, items=None):
+        self.items = items or []
+        self.adelete_mock = AsyncMock()
+        self.afirst_mock = AsyncMock(return_value=self.items[0] if self.items else None)
+
+    async def __aiter__(self):
+        for item in self.items:
+            yield item
+
+    async def adelete(self):
+        return await self.adelete_mock()
+
+    async def afirst(self):
+        return await self.afirst_mock()
+
+    def filter(self, *args, **kwargs):
+        return self
+
+
+# --- ТЕСТ 1: Обычный пользователь (не организатор и не приглашенный) ---
+@pytest.mark.asyncio
+@patch('app.handlers.utils.Event')
+@patch('app.handlers.utils.Appointment')
+async def test_notify_and_cancel_appointments_no_roles(mock_Appointment, mock_Event):
+    bot_mock = AsyncMock()
+    
+    # Мокаем удаляемое событие
+    mock_event = MagicMock()
+    mock_event.id = 10
+    mock_event.event_date = date(2026, 10, 20)
+    mock_event.start_time = time(10, 0)
+    mock_event.end_time = time(11, 0)
+
+    # 1. Отдаем событие в первый цикл (events_to_delete)
+    mock_Event.objects.filter.return_value = AsyncMockQuerySet([mock_event])
+    
+    # 2. Мокаем отсутствие встреч как организатор (пустой QuerySet)
+    mock_Appointment.objects.filter.return_value = AsyncMockQuerySet([])
+    
+    # 3. Мокаем отсутствие приглашений (afirst() вернет None)
+    mock_Appointment.objects.select_related.return_value.filter.return_value = AsyncMockQuerySet([])
+
+    # ВЫЗОВ
+    await notify_and_cancel_appointments(12345, 'id', 10, bot_mock)
+
+    # ПРОВЕРКА
+    # Убеждаемся, что бот никому ничего не отправлял
+    bot_mock.send_message.assert_not_called()
+
+
+# --- ТЕСТ 2: Пользователь - ОРГАНИЗАТОР (2 приглашенных) ---
+@pytest.mark.asyncio
+@patch('app.handlers.utils.Event')
+@patch('app.handlers.utils.Appointment')
+async def test_notify_and_cancel_appointments_as_organizer(mock_Appointment, mock_Event):
+    bot_mock = AsyncMock()
+    
+    mock_event = MagicMock()
+    mock_event.id = 10
+    mock_event.title = "Супер Встреча"
+    mock_event.event_date = date(2026, 10, 20)
+    mock_event.start_time = time(10, 0)
+    mock_event.end_time = time(11, 0)
+    
+    # Настраиваем логику Event.objects.filter, чтобы она возвращала разные QuerySet'ы
+    # Первый раз - для цикла, второй раз - для удаления заметки ребенка
+    child_delete_qs = AsyncMockQuerySet([])
+    
+    def event_filter_side_effect(*args, **kwargs):
+        # Если фильтр вызван для организатора (ID 999) - возвращаем родительское событие
+        if kwargs.get('user_id') == 999:
+            return AsyncMockQuerySet([mock_event])
+        
+        # Если фильтр вызван для детей (ID 111 или 222) - возвращаем мок для удаления
+        return child_delete_qs
+    
+    mock_Event.objects.filter.side_effect = event_filter_side_effect
+
+    # Мокаем двух приглашенных детей
+    mock_appt1 = AsyncMock()
+    mock_appt1.invitee_id = 111
+    
+    mock_appt2 = AsyncMock()
+    mock_appt2.invitee_id = 222
+
+    mock_Appointment.objects.filter.return_value = AsyncMockQuerySet([mock_appt1, mock_appt2])
+    
+    # Юзер не ребенок, поэтому select_related (СЦЕНАРИЙ Б) возвращает пустоту
+    mock_Appointment.objects.select_related.return_value.filter.return_value = AsyncMockQuerySet([])
+    
+    # ВЫЗОВ
+    await notify_and_cancel_appointments(999, 'id', 10, bot_mock)
+
+    # ПРОВЕРКИ СЦЕНАРИЯ А
+    # 1. Проверяем, что бот отправил ровно 2 сообщения (по одному каждому ребенку)
+    assert bot_mock.send_message.call_count == 2
+    
+    
+    # Проверяем, кому ушли сообщения
+    calls = bot_mock.send_message.call_args_list
+    assert calls[0].kwargs['chat_id'] == 111
+    assert calls[1].kwargs['chat_id'] == 222
+    
+    # Проверяем текст в сообщении
+    assert "Организатор (ID: `999`) отменил мероприятие:" in calls[0].kwargs['text']
+    assert "Супер Встреча" in calls[0].kwargs['text']
+
+    # 2. Проверяем, что локальные копии заметок удалены дважды (Event...adelete())
+    assert child_delete_qs.adelete_mock.call_count == 2
+    
+    # 3. Проверяем, что связи (Appointment) тоже удалились дважды
+    mock_appt1.adelete.assert_awaited_once()
+    mock_appt2.adelete.assert_awaited_once()
+
+
+# --- ТЕСТ 3: Пользователь - РЕБЕНОК (отменяет участие) ---
+@pytest.mark.asyncio
+@patch('app.handlers.utils.Event')
+@patch('app.handlers.utils.Appointment')
+async def test_notify_and_cancel_appointments_as_child(mock_Appointment, mock_Event):
+    bot_mock = AsyncMock()
+    
+    # Локальная заметка ребенка
+    mock_event = MagicMock()
+    mock_event.id = 10
+    mock_event.event_date = date(2026, 10, 20)
+    mock_event.start_time = None # Проверим как отрабатывает "Весь день"
+    
+    mock_Event.objects.filter.return_value = AsyncMockQuerySet([mock_event])
+    
+    # Пользователь не организатор, встреч в которых он хозяин нет
+    mock_Appointment.objects.filter.return_value = AsyncMockQuerySet([])
+
+    # Мокаем встречу, где он приглашенный
+    mock_appt_as_invitee = AsyncMock()
+    mock_appt_as_invitee.status = "CONFIRMED" # Только не CANCELLED
+    mock_appt_as_invitee.event.user_id = 888 # ID организатора
+    mock_appt_as_invitee.event.title = "Праздник"
+
+    mock_Appointment.objects.select_related.return_value.filter.return_value = AsyncMockQuerySet([mock_appt_as_invitee])
+
+    # ВЫЗОВ
+    await notify_and_cancel_appointments(111, 'id', 10, bot_mock)
+
+    # ПРОВЕРКИ СЦЕНАРИЯ Б
+    # 1. Бот должен уведомить организатора (ID 888) один раз
+    bot_mock.send_message.assert_awaited_once()
+    call_kwargs = bot_mock.send_message.call_args.kwargs
+    
+    assert call_kwargs['chat_id'] == 888
+    assert "Пользователь (ID: `111`) отменил свое участие" in call_kwargs['text']
+    assert "Весь день" in call_kwargs['text'] # Проверка формата времени
+
+    # 2. Связь (Appointment) должна быть удалена
+    mock_appt_as_invitee.adelete.assert_awaited_once()
+
+
+

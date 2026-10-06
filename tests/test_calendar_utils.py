@@ -1,8 +1,12 @@
 import datetime
+from datetime import date
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
+from app.handlers.calendar_act_with_options import confirm_to_delete
+from app.handlers.states import CONFIRMING_DELETE
 from app.handlers.utils import get_validated_event_index
 
 def test_build_detailed_event_text_basic():
@@ -150,3 +154,73 @@ async def test_get_validated_event_index_success():
 
     # Убеждаемся, что бот ничего не ответил в чат (так как ошибки нет)
     update_mock.message.reply_text.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_act_with_options.generate_confirm_keyboard')
+async def test_confirm_to_delete_from_callback(mock_gen_keyboard: AsyncMock):
+    # ТЕСТ 1: Имитируем вызов из инлайн-кнопки (CallbackQuery)
+    mock_gen_keyboard.return_value = "keyboard_mock"
+    
+    source_mock = AsyncMock()
+    # У source_mock по умолчанию есть любой атрибут, так что hasattr вернет True
+    
+    event_text = "📌 *Событие*: \\[10:00 - 11:00] Встреча 1\n"
+    selected_date = date(2026, 10, 20)
+    delete_text = ("событие № 1?", "эту заметку.")
+
+    result = await confirm_to_delete(source_mock, event_text, selected_date, delete_text)
+
+    # Проверяем возврат стейта
+    assert result == CONFIRMING_DELETE
+    
+    # Проверяем, что вызвался edit_message_text, а не reply_text
+    source_mock.edit_message_text.assert_awaited_once()
+    source_mock.message.reply_text.assert_not_awaited()
+
+    # Проверяем аргументы и форматирование текста
+    kwargs = source_mock.edit_message_text.call_args.kwargs
+    text = kwargs['text']
+    
+    assert "❓ *Вы уверены, что хотите удалить событие № 1?*" in text
+    assert "📌 *Событие*: \\[10:00 - 11:00] Встреча 1" in text
+    assert "📅 *Дата*: 20.10.2026" in text
+    assert "⚠️ Это действие полностью сотрёт эту заметку." in text
+    
+    assert kwargs['reply_markup'] == "keyboard_mock"
+    assert kwargs['parse_mode'] == "Markdown"
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_act_with_options.generate_confirm_keyboard')
+async def test_confirm_to_delete_from_text_update(mock_gen_keyboard: AsyncMock):
+    # ТЕСТ 2: Имитируем вызов из текстового ввода (Update)
+    mock_gen_keyboard.return_value = "keyboard_mock"
+    
+    source_mock = AsyncMock()
+    # Жестко удаляем атрибут, чтобы hasattr(source, "edit_message_text") выдало False
+    del source_mock.edit_message_text
+    
+    event_text = "📌 *Событие*: \\[12:00 - 13:00] Встреча 2\n"
+    selected_date = date(2026, 1, 5) # Берем дату с однозначным числом месяца/дня для проверки нулей
+    delete_text = ("все мероприятия?", "вообще всё.")
+
+    result = await confirm_to_delete(source_mock, event_text, selected_date, delete_text)
+
+    # Проверяем возврат стейта
+    assert result == CONFIRMING_DELETE
+    
+    # Проверяем, что вызвался reply_text, так как это текстовое сообщение
+    source_mock.message.reply_text.assert_awaited_once()
+    
+    # Проверяем форматирование (особенно работу форматирования даты с ведущими нулями: 05.01.2026)
+    kwargs = source_mock.message.reply_text.call_args.kwargs
+    text = kwargs['text']
+    
+    assert "❓ *Вы уверены, что хотите удалить все мероприятия?*" in text
+    assert "📌 *Событие*: \\[12:00 - 13:00] Встреча 2" in text
+    assert "📅 *Дата*: 05.01.2026" in text
+    assert "⚠️ Это действие полностью сотрёт вообще всё." in text
+    
+    assert kwargs['reply_markup'] == "keyboard_mock"
+    assert kwargs['parse_mode'] == "Markdown"

@@ -1,8 +1,9 @@
 from datetime import datetime, date, time
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
+from telegram.ext import ConversationHandler
 
-from app.handlers.calendar_delete_event import handle_delete_choice
+from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
@@ -297,7 +298,6 @@ async def test_handle_delete_choice_prepare_delete_all(mock_handle_delete_confir
     assert result == CHOOSING_ACTION
 
 
-
 @pytest.mark.asyncio
 @patch('app.handlers.calendar_delete_event.confirm_to_delete')
 async def test_handle_delete_all_events(mock_confirm_to_delete: AsyncMock):
@@ -333,7 +333,78 @@ async def test_handle_delete_all_events(mock_confirm_to_delete: AsyncMock):
     assert '08:00 - 08:30 Перекур' in text_with_events
     assert date(2026, 10, 1) == selected_date
 
-    print(mock_confirm_to_delete.call_args.args)
-
     assert '*АБСОЛЮТНО ВСЕ* мероприятия на этот день?' in delete_text[0]
     assert '**все существующие заметки** на эту дату! Восстановление будет невозможно' in delete_text[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "column_name", ['id', 'event_date']
+)
+@patch('app.handlers.calendar_delete_event.notify_and_cancel_appointments')
+@patch('app.handlers.calendar_delete_event.del_event_on_info')
+@patch('app.handlers.calendar_delete_event.prepare_after_delete')
+async def test_handle_delete_confirmation_for_one_event_and_all_events(
+    mock_prepare_after_delete: AsyncMock,
+    mock_del_event_on_info: AsyncMock,
+    mock_notify_and_cancel_appointments: AsyncMock,
+    column_name: str
+):
+    mock_prepare_after_delete.return_value = ConversationHandler.END
+
+    update_mock, context_mock = MagicMock(), MagicMock()
+
+    update_mock.callback_query.data = 'confirm_delete_yes'
+    context_mock.user_data = {
+        'delete_event_id': 123,
+        'column_name': column_name
+    }
+    update_mock.effective_user.id = 12345
+    
+    result: int = await handle_delete_confirmation(update_mock, context_mock)
+
+    assert result == ConversationHandler.END
+
+    mock_notify_and_cancel_appointments.assert_awaited_once_with(
+        12345, column_name, 123, context_mock.bot
+    )
+
+    mock_del_event_on_info.assert_awaited_once_with(
+        context_mock, update_mock, column_name, 123
+    )
+
+    mock_prepare_after_delete.assert_awaited_once_with(
+        update_mock, context_mock, update_mock.callback_query
+    )
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_delete_event.handle_back_to_day_menu_click')
+async def test_handle_delete_confirmation_no(mock_handle_back_to_day_menu: AsyncMock):
+    # Мокаем возврат из функции возврата в меню
+    mock_handle_back_to_day_menu.return_value = CHOOSING_ACTION
+
+    update_mock, context_mock = MagicMock(), MagicMock()
+    # Любая data, отличная от "confirm_delete_yes", отправит нас в ветку else
+    update_mock.callback_query.data = 'confirm_delete_no'
+
+    # Наполняем контекст ключами, которые должны быть удалены, и ключом-свидетелем
+    context_mock.user_data = {
+        'delete_event_id': 123,
+        'column_name': 'id',
+        'safe_key': 'im_safe'
+    }
+
+    result: int = await handle_delete_confirmation(update_mock, context_mock)
+
+    assert result == CHOOSING_ACTION
+
+    # Валидируем, что нужные ключи стерты
+    assert 'delete_event_id' not in context_mock.user_data
+    assert 'column_name' not in context_mock.user_data
+    
+    # Валидируем, что контекст не очистили целиком
+    assert context_mock.user_data.get('safe_key') == 'im_safe'
+
+    # Проверяем, что хэндлер возврата вызвался правильно
+    mock_handle_back_to_day_menu.assert_awaited_once_with(update_mock, context_mock)

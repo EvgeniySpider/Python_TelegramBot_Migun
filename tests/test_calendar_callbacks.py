@@ -9,6 +9,7 @@ from app.handlers.calendar_act_with_options import handle_delete_event_by_number
 from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_delete_event import handle_delete_choice
 from app.handlers.calendar_edit_flow import handle_edit_event_by_text_number, handle_edit_event_selection
+from app.handlers.calendar_invite import handle_invite_event_by_text_number, handle_invite_event_selection
 from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
     CHOOSING_ACTION,
@@ -1226,3 +1227,70 @@ async def test_handle_delete_event_by_number_success(
         test_date,
         ("событие № 2?", "эту заметку.") 
     )
+
+
+
+# --- ТЕСТ 1: Приглашение через инлайн-кнопку ---
+@pytest.mark.asyncio
+async def test_handle_invite_event_selection_success():
+    update_mock = AsyncMock()
+    # Имитируем клик по второй кнопке (индекс 1)
+    update_mock.callback_query.data = "invite_num:1"
+
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'event_text_record': [
+            {'id': 100, 'title': 'Секретное собрание'},
+            {'id': 200, 'title': 'Корпоратив'}
+        ]
+    }
+
+    result = await handle_invite_event_selection(update_mock, context_mock)
+
+    assert result == TYPING_INVITEE_ID
+
+    # Проверяем, что ID правильного события сохранен в контекст
+    assert context_mock.user_data['invite_event_id'] == 200
+
+    # Проверяем, что бот ответил на callback (чтобы часики не крутились)
+    update_mock.callback_query.answer.assert_awaited_once()
+
+    # Проверяем текст сообщения
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    
+    assert "Выбрано событие: *Корпоратив*" in kwargs['text']
+    assert "*отправьте Telegram ID*" in kwargs['text']
+    assert kwargs['parse_mode'] == "Markdown"
+
+
+# --- ТЕСТ 2: Приглашение через текстовый ввод номера ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.get_validated_event_index')
+async def test_handle_invite_event_by_text_number_success(mock_get_validated: AsyncMock):
+    event_list = [
+        {'id': 100, 'title': 'Секретное собрание'},
+        {'id': 200, 'title': 'Корпоратив'}
+    ]
+    
+    # Мокаем успешное прохождение валидатора: возвращаем индекс 1
+    mock_get_validated.return_value = (True, 1, event_list)
+
+    update_mock = AsyncMock()
+    context_mock = MagicMock()
+    context_mock.user_data = {}
+
+    result = await handle_invite_event_by_text_number(update_mock, context_mock)
+
+    assert result == TYPING_INVITEE_ID
+
+    # Проверяем запись в контекст
+    assert context_mock.user_data['invite_event_id'] == 200
+    print(context_mock.user_data)
+    # Проверяем текст ответа (reply_text)
+    update_mock.message.reply_text.assert_awaited_once()
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+    
+    assert "Выбрано событие: *Корпоратив*" in kwargs['text']
+    assert "*отправьте Telegram ID*" in kwargs['text']
+    assert kwargs['parse_mode'] == "Markdown"

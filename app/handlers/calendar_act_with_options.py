@@ -280,7 +280,7 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     context.user_data['column_name'] = 'id'
 
     selected_date = context.user_data.get('selected_date')
-    delete_text = f"событие № {index_record - 1}?", "эту заметку."
+    delete_text = f"событие № {index_record + 1}?", "эту заметку."
 
     event_time = format_event_time(
         event_rec["start_time"], event_rec["end_time"])

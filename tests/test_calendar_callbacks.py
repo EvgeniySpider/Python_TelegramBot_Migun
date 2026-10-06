@@ -5,8 +5,9 @@ from datetime import date, time
 
 from telegram import InlineKeyboardMarkup
 
-from app.handlers.calendar_act_with_options import handle_options_click
+from app.handlers.calendar_act_with_options import handle_delete_event_by_number, handle_options_click
 from app.handlers.calendar_callbacks import handle_calendar_click
+from app.handlers.calendar_delete_event import handle_delete_choice
 from app.handlers.calendar_edit_flow import handle_edit_event_by_text_number, handle_edit_event_selection
 from app.handlers.calendar_set_event import handle_desc_choice, handle_time_input_exact, handle_time_input_interval, handle_title_input
 from app.handlers.states import (
@@ -1140,3 +1141,88 @@ async def test_handle_edit_event_by_text_number_success(
 
     # Здесь уже не edit_message_text, а reply_text, так как это ответ на сообщение
     update_mock.message.reply_text.assert_awaited_once()
+
+
+# --- ТЕСТ 1: Удаление по инлайн-кнопке конкретного события ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_delete_event.confirm_to_delete')
+@patch('app.handlers.calendar_delete_event.format_event_time')
+async def test_handle_delete_choice_specific_event(
+    mock_format_time: MagicMock,
+    mock_confirm_to_delete: AsyncMock
+):
+    mock_confirm_to_delete.return_value = CONFIRMING_DELETE
+    mock_format_time.return_value = "10:00 - 11:00"
+
+    update_mock = AsyncMock()
+    # Имитируем клик по второй кнопке (индекс 1)
+    update_mock.callback_query.data = "del_num:1"
+
+    test_date = date(2026, 10, 20)
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': test_date,
+        'event_text_record': [
+            {'id': 10, 'title': 'Событие 0', 'start_time': time(9, 0), 'end_time': time(10, 0)},
+            {'id': 11, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0)}
+        ]
+    }
+
+    result: int = await handle_delete_choice(update_mock, context_mock)
+
+    assert result == CONFIRMING_DELETE
+
+    # Проверяем, что в context легли правильные параметры для удаления
+    assert context_mock.user_data['delete_event_id'] == 11
+    assert context_mock.user_data['column_name'] == 'id'
+
+    # Проверяем правильный вызов confirm_to_delete
+    mock_confirm_to_delete.assert_awaited_once_with(
+        update_mock.callback_query,
+        "📌 *Событие*: \\[10:00 - 11:00] Событие 1\n",
+        test_date,
+        ("событие № 2?", "заметку.")
+    )
+
+# --- ТЕСТ 2: Удаление через текстовый ввод номера ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_act_with_options.confirm_to_delete')
+@patch('app.handlers.calendar_act_with_options.get_validated_event_index')
+@patch('app.handlers.calendar_act_with_options.format_event_time')
+async def test_handle_delete_event_by_number_success(
+    mock_format_time: MagicMock,
+    mock_get_validated: AsyncMock,
+    mock_confirm_to_delete: AsyncMock
+):
+    mock_confirm_to_delete.return_value = CONFIRMING_DELETE
+    mock_format_time.return_value = "10:00 - 11:00"
+    
+    event_list = [
+        {'id': 10, 'title': 'Событие 0', 'start_time': time(9, 0), 'end_time': time(10, 0)},
+        {'id': 11, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0)}
+    ]
+    
+    # Мокаем успешную валидацию (индекс 1)
+    mock_get_validated.return_value = (True, 1, event_list)
+
+    update_mock = AsyncMock()
+    test_date = date(2026, 10, 20)
+    context_mock = MagicMock()
+    context_mock.user_data = {
+        'selected_date': test_date
+    }
+
+    result: int = await handle_delete_event_by_number(update_mock, context_mock)
+
+    assert result == CONFIRMING_DELETE
+
+    # Проверяем, что зафиксировались таргенты на событие с id=11
+    assert context_mock.user_data['delete_event_id'] == 11
+    assert context_mock.user_data['column_name'] == 'id'
+
+    mock_confirm_to_delete.assert_awaited_once_with(
+        update_mock,
+        "📌 *Событие*: \\[10:00 - 11:00] Событие 1\n",
+        test_date,
+        ("событие № 2?", "эту заметку.") 
+    )

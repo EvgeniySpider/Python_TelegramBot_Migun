@@ -2,11 +2,14 @@ from datetime import datetime, date, time
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
+from app.handlers.calendar_delete_event import handle_delete_choice
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
 from app.handlers.states import (
+    CHOOSING_ACTION,
     CHOOSING_TIME,
+    CONFIRMING_DELETE,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_TITLE
@@ -278,3 +281,59 @@ async def test_handle_set_event_exact_busy_day():
     assert 'Запланированные дела:' in kwargs['text']
     assert '08:00 - 09:00 Уборка' in kwargs['text'] # Событие которое есть в этом дне (events_text)
     assert 'Тип события: [ ⏱️ Точное время ]' in kwargs['text'] # Тип события которое добавляем
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_delete_event.handle_delete_confirmation')
+async def test_handle_cancel_delete_one_event(mock_handle_delete_confirmation: AsyncMock):
+    update_mock = MagicMock()
+    context_mock = MagicMock()
+
+    mock_handle_delete_confirmation.return_value = CHOOSING_ACTION
+    update_mock.callback_query.data = 'del_num:cancel'
+
+    result: int = await handle_delete_choice(update_mock, context_mock)
+
+    assert result == CHOOSING_ACTION
+
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_delete_event.confirm_to_delete')
+async def test_handle_delete_all_events(mock_confirm_to_delete: AsyncMock):
+    update_mock = MagicMock()
+    context_mock = MagicMock()
+    
+    mock_confirm_to_delete.return_value = CONFIRMING_DELETE
+    update_mock.callback_query.data = 'del_num:everything'
+
+    context_mock.user_data = {
+        'event_text_record': [
+            {'title': 'Уборка', 'start_time': time(7, 0), 'end_time': time(8, 0), 'event_type': 'interval'},
+            {'title': 'Перекур', 'start_time': time(8, 0), 'end_time': time(8, 30), 'event_type': 'exact'}
+        ],
+        'selected_date': date(2026, 10, 1)
+    }
+
+    result: int = await handle_delete_choice(update_mock, context_mock)
+
+    assert result == CONFIRMING_DELETE
+
+    assert context_mock.user_data['delete_alert_text'] == "🗑️ Все мероприятия успешно удалены!"
+    assert context_mock.user_data['delete_event_id'] == date(2026, 10, 1)
+    assert context_mock.user_data['column_name'] == 'event_date'
+
+    mock_confirm_to_delete.assert_awaited_once()
+    args = mock_confirm_to_delete.call_args.args
+    text_with_events = args[1]
+    selected_date = args[2]
+    delete_text: tuple = args[3]
+
+    assert '07:00 - 08:00 Уборка' in text_with_events
+    assert '08:00 - 08:30 Перекур' in text_with_events
+    assert date(2026, 10, 1) == selected_date
+
+    print(mock_confirm_to_delete.call_args.args)
+
+    assert '*АБСОЛЮТНО ВСЕ* мероприятия на этот день?' in delete_text[0]
+    assert '**все существующие заметки** на эту дату! Восстановление будет невозможно' in delete_text[1]

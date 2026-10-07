@@ -14,6 +14,7 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_TIME,
     CONFIRMING_DELETE,
+    TYPING_EDIT_DESC,
     TYPING_EDIT_TITLE,
     TYPING_INVITEE_ID,
     WAITING_FOR_TIME_INPUT_EXACT,
@@ -716,7 +717,6 @@ async def test_handle_typing_edit_title(
 
     mock_refresh_day_menu_after_edit.return_value = CHOOSING_ACTION
 
-
     result: int = await handle_typing_edit_title(update_mock, context_mock)
 
     assert result == CHOOSING_ACTION
@@ -738,3 +738,65 @@ async def test_handle_typing_edit_title(
 
     # Проверяем текст статуса
     assert 'Название события успешно изменено' in context_mock.user_data['edit_success_status']
+
+
+# --- 1. ПРЕАМБУЛА: Клик по кнопке "Описание" ---
+@pytest.mark.asyncio
+async def test_handle_edit_field_click_desc():
+    # Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.callback_query.data = 'edit_field:desc'
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    # Вызов
+    result: int = await handle_edit_field_click(update_mock, context_mock)
+
+    # Проверки
+    assert result == TYPING_EDIT_DESC
+
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    assert 'Введите новое описание для этого события' in kwargs['text']
+
+
+# --- 2. МЯСО: Сохранение нового описания в БД ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow._refresh_day_menu_after_edit')
+async def test_handle_typing_edit_desc(
+    mock_refresh_day_menu_after_edit: AsyncMock
+):
+    # Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    # Сразу передаем текст описания (с пробелами для проверки strip)
+    update_mock.message.text = ' Новое крутое описание '
+    context_mock.user_data = {'edit_event_id': 999}
+    update_mock.effective_user.id = 123
+
+    # Правильный мок БД
+    con_mock = AsyncMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = con_mock
+    context_mock.application.stats_repository.increment_metric = AsyncMock()
+    context_mock.application.stats_repository.increment_user_metric = AsyncMock()
+
+    mock_refresh_day_menu_after_edit.return_value = CHOOSING_ACTION
+
+    # ВЫЗОВ
+    result: int = await handle_typing_edit_desc(update_mock, context_mock)
+
+    # Проверки
+    assert result == CHOOSING_ACTION
+
+    args: tuple = con_mock.execute.call_args.args
+    assert args[0] == 'UPDATE events SET description = $1 WHERE id = $2'
+    assert args[1] == 'Новое крутое описание' # Проверяем, что пробелы отрезались
+    assert args[2] == 999
+
+    # Проверка метрик
+    context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
+        'events_edited'
+    )
+    context_mock.application.stats_repository.increment_user_metric.assert_awaited_once_with(
+        123, 'events_edited'
+    )
+    
+    # Проверка статуса
+    assert 'Описание события успешно изменено' in context_mock.user_data['edit_success_status']

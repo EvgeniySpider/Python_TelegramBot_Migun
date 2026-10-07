@@ -130,8 +130,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
             reply_markup=generate_back_to_menu_button(),
             parse_mode="Markdown"
         )
-        context.user_data.pop('invite_event_id', None)
-        return await calendar_command(update, context)
+        return TYPING_INVITEE_ID
 
     # 4. Если свободен — создаем запись в таблице appointments
     appointment, created = await Appointment.objects.aget_or_create(
@@ -145,6 +144,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
             "ℹ️ Вы уже отправляли приглашение этому пользователю на данное событие.",
             reply_markup=generate_back_to_menu_button()
             )
+        return TYPING_INVITEE_ID
     else:
         inviter_name = update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
         invite_text = (
@@ -177,9 +177,8 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
                 reply_markup=generate_back_to_menu_button()
             )
             await appointment.adelete()
-    
-    context.user_data.pop('invite_event_id', None)
-    return ConversationHandler.END
+            
+    return TYPING_INVITEE_ID
 
 
 async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

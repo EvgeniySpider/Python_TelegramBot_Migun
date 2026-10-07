@@ -93,7 +93,10 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     )
 
     if not is_valid:
-        await update.message.reply_text(validation_result)
+        await update.message.reply_text(
+            validation_result,
+            reply_markup=generate_back_to_menu_button()
+        )
         return TYPING_INVITEE_ID
         
     invitee_id = validation_result
@@ -109,6 +112,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(
             "❌ Пользователь с таким ID *не зарегистрирован* в нашем боте.\n"
             "Проверьте ID и попробуйте еще раз:",
+            reply_markup=generate_back_to_menu_button(),
             parse_mode="Markdown"
         )
         return TYPING_INVITEE_ID
@@ -123,6 +127,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(
             "⚠️ К сожалению, в это время пользователь *уже занят* (у него запланировано другое событие).\n\n"
             "Встреча не назначена. Выберите другое время или пригласите кого-то еще.",
+            reply_markup=generate_back_to_menu_button(),
             parse_mode="Markdown"
         )
         context.user_data.pop('invite_event_id', None)
@@ -136,7 +141,10 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     )
 
     if not created:
-        await update.message.reply_text("ℹ️ Вы уже отправляли приглашение этому пользователю на данное событие.")
+        await update.message.reply_text(
+            "ℹ️ Вы уже отправляли приглашение этому пользователю на данное событие.",
+            reply_markup=generate_back_to_menu_button()
+            )
     else:
         inviter_name = update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
         invite_text = (
@@ -160,11 +168,13 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text(
                 f"✅ Приглашение успешно создано!\n"
                 f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
+                reply_markup=generate_back_to_menu_button(),
                 parse_mode="Markdown"
             )
         except TelegramError:
             await update.message.reply_text(
-                "⚠️ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал."
+                "⚠️ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
+                reply_markup=generate_back_to_menu_button()
             )
             await appointment.adelete()
     

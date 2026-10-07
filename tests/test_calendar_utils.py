@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, ANY
 
 
+from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_act_with_options import confirm_to_delete
 from app.handlers.calendar_delete_event import del_event_on_info
@@ -416,5 +417,49 @@ async def test_del_event_on_info(mock_delete_events_by_filter: AsyncMock):
         12345, 'events_cancelled', 1
     )
 
+# --- ПОЗИТИВНЫЕ СЦЕНАРИИ ---
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "column_name, db_response, expected_count",
+    [
+        ('id', 'DELETE 1', 1),
+        ('event_date', 'DELETE 5', 5),
+    ]
+)
+async def test_delete_events_by_filter_positive(
+    column_name: str,
+    db_response: str,
+    expected_count: int
+):
+    mock_con = AsyncMock()
+    # Мокаем ответ от базы данных (например, "DELETE 1")
+    mock_con.execute = AsyncMock(return_value=db_response)
+
+    result = await CalendarRepository.delete_events_by_filter(mock_con, column_name, 999)
+
+    # Проверяем, что метод вернул правильное число
+    assert result == expected_count
+
+    # Проверяем, что SQL-запрос сформирован с нужной колонкой
+    assert column_name in mock_con.execute.call_args.args[0]
+    # Проверяем, что значение подставилось правильно
+    assert mock_con.execute.call_args.args[1] == 999
+
+
+# --- НЕГАТИВНЫЙ СЦЕНАРИЙ (ПРОВЕРКА ИСКЛЮЧЕНИЯ) ---
+@pytest.mark.asyncio
+async def test_delete_events_by_filter_raises_value_error():
+    mock_con = AsyncMock()
+    bad_column = 'incorrect_value'
+
+    # Оборачиваем вызов в контекстный менеджер pytest.raises
+    with pytest.raises(ValueError) as exc_info:
+        await CalendarRepository.delete_events_by_filter(mock_con, bad_column, 999)
+
+    # exc_info.value содержит сам объект перехваченной ошибки
+    assert str(exc_info.value) == f"Недопустимое имя столбца для удаления: {bad_column}"
+    
+    # Дополнительно убеждаемся, что до базы данных запрос даже не дошел
+    mock_con.execute.assert_not_called()
 
     

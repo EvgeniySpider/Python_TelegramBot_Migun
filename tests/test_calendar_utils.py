@@ -3,11 +3,13 @@ from datetime import date, time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, ANY
 
+from telegram.ext import ConversationHandler
+
 
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_act_with_options import confirm_to_delete
-from app.handlers.calendar_delete_event import del_event_on_info
+from app.handlers.calendar_delete_event import del_event_on_info, prepare_after_delete
 from app.handlers.states import CONFIRMING_DELETE
 from app.handlers.utils import get_validated_event_index, notify_and_cancel_appointments
 
@@ -462,4 +464,28 @@ async def test_delete_events_by_filter_raises_value_error():
     # Дополнительно убеждаемся, что до базы данных запрос даже не дошел
     mock_con.execute.assert_not_called()
 
-    
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_delete_event.calendar_command')
+async def test_prepare_after_delete(mock_calendar_command: AsyncMock):
+    context_mock, update_mock, query = MagicMock(), MagicMock(), MagicMock()
+
+    context_mock.user_data = {
+        'delete_event_id': 999,
+        'event_text_record': 'text_record',
+        'delete_alert_text': '🗑️ Мероприятие успешно удалено!',
+        'save_data': 'save_data'
+    }
+
+    query.answer = AsyncMock()
+
+    result: int = await prepare_after_delete(update_mock, context_mock, query)
+
+    assert result == ConversationHandler.END
+
+    assert context_mock.user_data['save_data'] == 'save_data'
+    assert 'delete_event_id' not in context_mock.user_data
+    assert 'event_text_record' not in context_mock.user_data
+    assert 'delete_alert_text' not in context_mock.user_data
+
+    query.answer.assert_awaited_once_with(text='🗑️ Мероприятие успешно удалено!')
+    mock_calendar_command.assert_awaited_once_with(update_mock, context_mock)

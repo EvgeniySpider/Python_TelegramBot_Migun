@@ -5,6 +5,7 @@ from telegram.ext import ConversationHandler
 from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
+from app.handlers.calendar_edit_flow import handle_edit_field_click, handle_typing_edit_desc, handle_typing_edit_title
 from app.handlers.calendar_invite import handle_invitee_id_input
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
@@ -13,12 +14,13 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_TIME,
     CONFIRMING_DELETE,
+    TYPING_EDIT_TITLE,
     TYPING_INVITEE_ID,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_TITLE
 )
-from app.handlers.utils import validate_telegram_id_input
+
 
 
 def test_generate_calendar_keyboard_complex_state():
@@ -675,3 +677,64 @@ async def test_handle_invitee_id_input_telegram_error(
 
     # ГЛАВНАЯ ПРОВЕРКА: убеждаемся, что мы "подмели" за собой в базе данных
     mock_appointment.adelete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_edit_field_click():
+    # Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.callback_query.data = 'edit_field:title'
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    result: int = await handle_edit_field_click(update_mock, context_mock)
+
+    assert result == TYPING_EDIT_TITLE
+
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    assert 'Введите новое название для этого события' in kwargs['text']
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow._refresh_day_menu_after_edit')
+async def test_handle_typing_edit_title(
+    mock_refresh_day_menu_after_edit: AsyncMock
+):
+    # Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    # Проверяем, что strip() сработает (убирает пробелы по краям)
+    update_mock.message.text = ' Новое название для события '
+    context_mock.user_data = {'edit_event_id': 999}
+    update_mock.effective_user.id = 123
+
+    # --- ПРАВИЛЬНЫЙ МОК БД ---
+    con_mock = AsyncMock()
+    # Контекстный менеджер возвращает именно наше соединение
+    context_mock.application.database.connection.return_value.__aenter__.return_value = con_mock
+
+    context_mock.application.stats_repository.increment_metric = AsyncMock()
+    context_mock.application.stats_repository.increment_user_metric = AsyncMock()
+
+    mock_refresh_day_menu_after_edit.return_value = CHOOSING_ACTION
+
+
+    result: int = await handle_typing_edit_title(update_mock, context_mock)
+
+    assert result == CHOOSING_ACTION
+
+    # Проверяем вызов к базе через con_mock
+    con_mock.execute.assert_awaited_once()
+    args = con_mock.execute.call_args.args
+    assert args[0] == 'UPDATE events SET title = $1 WHERE id = $2' # Тут title
+    assert args[1] == 'Новое название для события' # Пробелы по краям удалены!
+    assert args[2] == 999
+
+    # Метрики
+    context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
+        'events_edited'
+    )
+    context_mock.application.stats_repository.increment_user_metric.assert_awaited_once_with(
+        123, 'events_edited'
+    )
+
+    # Проверяем текст статуса
+    assert 'Название события успешно изменено' in context_mock.user_data['edit_success_status']

@@ -1,11 +1,12 @@
 import datetime
 from datetime import date, time
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, ANY
 
 
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_act_with_options import confirm_to_delete
+from app.handlers.calendar_delete_event import del_event_on_info
 from app.handlers.states import CONFIRMING_DELETE
 from app.handlers.utils import get_validated_event_index, notify_and_cancel_appointments
 
@@ -387,4 +388,33 @@ async def test_notify_and_cancel_appointments_as_child(mock_Appointment, mock_Ev
     mock_appt_as_invitee.adelete.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_delete_event.CalendarRepository.delete_events_by_filter')
+async def test_del_event_on_info(mock_delete_events_by_filter: AsyncMock):
+    context_mock, update_mock = MagicMock(), AsyncMock()
 
+    mock_conn = AsyncMock()
+
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
+
+
+    mock_delete_events_by_filter.return_value = 1
+
+    context_mock.application.stats_repository.increment_metric = AsyncMock()
+    context_mock.application.stats_repository.increment_user_metric = AsyncMock()
+
+    update_mock.effective_user.id = 12345
+
+    await del_event_on_info(context_mock, update_mock, 'id', 999)
+
+    mock_delete_events_by_filter.assert_awaited_once_with(mock_conn, 'id', 999)
+
+    context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
+        'events_deleted', amount=1
+    )
+    context_mock.application.stats_repository.increment_user_metric.assert_awaited_once_with(
+        12345, 'events_cancelled', 1
+    )
+
+
+    

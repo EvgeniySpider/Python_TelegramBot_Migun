@@ -4,6 +4,7 @@ import pytest
 from telegram.ext import ConversationHandler
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
+from app.handlers.calendar_invite import handle_invitee_id_input
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
@@ -15,6 +16,7 @@ from app.handlers.states import (
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_TITLE
 )
+from app.handlers.utils import validate_telegram_id_input
 
 
 def test_generate_calendar_keyboard_complex_state():
@@ -408,3 +410,83 @@ async def test_handle_delete_confirmation_no(mock_handle_back_to_day_menu: Async
 
     # Проверяем, что хэндлер возврата вызвался правильно
     mock_handle_back_to_day_menu.assert_awaited_once_with(update_mock, context_mock)
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+@patch('app.handlers.calendar_invite.User')
+@patch('app.handlers.calendar_invite.Event')
+@patch('app.handlers.calendar_invite.Appointment')
+@patch('app.handlers.calendar_invite.check_user_availability')
+@patch('app.handlers.calendar_invite.generate_confirm_invite_keyboard')
+async def test_handle_invitee_id_input_positive(
+    mock_gen_keyboard: MagicMock,
+    mock_check_avail: AsyncMock,
+    mock_Appointment: MagicMock,
+    mock_Event: MagicMock,
+    mock_User: MagicMock,
+    mock_validate: MagicMock
+):
+    # 1. Настройка входных данных (Update, Context)
+    update_mock = MagicMock()
+    update_mock.message.text = "987654321"
+    update_mock.effective_user.id = 11111
+    update_mock.effective_user.first_name = "Шеф"
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+    context_mock.user_data = {'invite_event_id': 999}
+    context_mock.bot.send_message = AsyncMock()
+
+    # 2. Мокаем вспомогательные функции
+    # Возвращаем (is_valid=True, validation_result=987654321)
+    mock_validate.return_value = (True, 987654321)
+    mock_check_avail.return_value = False
+    mock_gen_keyboard.return_value = "fake_keyboard"
+
+    # 3. Мокаем Django ORM
+    # User.objects.filter(telegram_id=...).aexists()
+    mock_User.objects.filter.return_value.aexists = AsyncMock(return_value=True)
+
+    # Event.objects.aget(id=...)
+    target_event = MagicMock()
+    target_event.id = 999
+    target_event.title = "Секретное совещание"
+    target_event.event_date = date(2026, 10, 20)
+    target_event.start_time = time(15, 0)
+    mock_Event.objects.aget = AsyncMock(return_value=target_event)
+
+    # Appointment.objects.aget_or_create(...) возвращает кортеж (объект, created_bool)
+    created_appointment = MagicMock()
+    created_appointment.id = 777
+    mock_Appointment.objects.aget_or_create = AsyncMock(return_value=(created_appointment, True))
+    mock_Appointment.Status.PENDING = "PENDING"
+
+    # 4. Вызов хэндлера
+    result = await handle_invitee_id_input(update_mock, context_mock)
+
+    # 5. Проверки маршрутизации и стейта
+    assert result == ConversationHandler.END
+    assert 'invite_event_id' not in context_mock.user_data
+
+    # 6. Валидация вызовов БД
+    mock_User.objects.filter.assert_called_once_with(telegram_id=987654321)
+    mock_Event.objects.aget.assert_awaited_once_with(id=999)
+    mock_check_avail.assert_awaited_once_with(987654321, target_event)
+    mock_Appointment.objects.aget_or_create.assert_awaited_once_with(
+        event_id=999,
+        invitee_id=987654321,
+        defaults={'status': "PENDING"}
+    )
+
+    # 7. Валидация отправки сообщений
+    context_mock.bot.send_message.assert_awaited_once()
+    send_msg_kwargs = context_mock.bot.send_message.call_args.kwargs
+    assert send_msg_kwargs['chat_id'] == 987654321
+    assert "Секретное совещание" in send_msg_kwargs['text']
+    assert "Шеф" in send_msg_kwargs['text']
+    assert send_msg_kwargs['reply_markup'] == "fake_keyboard"
+
+    # Финальное сообщение самому пользователю (содержит ID приглашенного)
+    update_mock.message.reply_text.assert_awaited_once()
+    assert "987654321" in update_mock.message.reply_text.call_args.args[0]

@@ -12,6 +12,7 @@ from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_TIME,
     CONFIRMING_DELETE,
+    TYPING_INVITEE_ID,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_TITLE
@@ -463,7 +464,7 @@ async def test_handle_invitee_id_input_positive(
     mock_Appointment.Status.PENDING = "PENDING"
 
     # 4. Вызов хэндлера
-    result = await handle_invitee_id_input(update_mock, context_mock)
+    result: int = await handle_invitee_id_input(update_mock, context_mock)
 
     # 5. Проверки маршрутизации и стейта
     assert result == ConversationHandler.END
@@ -490,3 +491,76 @@ async def test_handle_invitee_id_input_positive(
     # Финальное сообщение самому пользователю (содержит ID приглашенного)
     update_mock.message.reply_text.assert_awaited_once()
     assert "987654321" in update_mock.message.reply_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_invitee_id_input_ourself(mock_validate: MagicMock):
+    # Подготовка данных
+    mock_validate.return_value = (False, 987654321)
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.message.reply_text = AsyncMock()
+
+    result: int = await handle_invitee_id_input(update_mock, context_mock)
+
+    # Проверка что остались на том же state-е
+    assert result == TYPING_INVITEE_ID
+
+    assert update_mock.message.reply_text.call_args.args[0] == 987654321
+
+    # Проверка что сообщение о приглашении не улетело приглашаемому (то-есть нам)
+    context_mock.bot.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.calendar_command')
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_invitee_id_input_with_deleted_event(
+    mock_validate: MagicMock,
+    mock_calendar_command: AsyncMock
+):
+    # Подготовка данных
+    mock_validate.return_value = (True, 987654321)
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.message.reply_text = AsyncMock()
+    mock_calendar_command.return_value = ConversationHandler.END
+
+    context_mock.user_data = {}
+   
+    result: int = await handle_invitee_id_input(update_mock, context_mock)
+
+    # Проверка что выкинуло в календарь
+    assert result == ConversationHandler.END
+
+    # Проверка что НАМ прилетело корректное сообщение об ошибке
+    assert 'Сессия устарела. Возвращаю вас в календарь' in update_mock.message.reply_text.call_args.args[0]
+
+    # Проверка что сообщение о приглашении не улетело приглашаемому (его не существует)
+    context_mock.bot.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.User')
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_invitee_unexited_telegram_id(
+    mock_validate: MagicMock,
+    mock_User: MagicMock,
+):
+    # Подготовка данных
+    mock_validate.return_value = (True, 987654321)
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.message.reply_text = AsyncMock()
+    mock_User.objects.filter.return_value.aexists = AsyncMock(return_value = False)
+
+    context_mock.user_data = {'invite_event_id': 400}
+   
+    result: int = await handle_invitee_id_input(update_mock, context_mock)
+
+    # Проверка что выкинуло в календарь
+    assert result == TYPING_INVITEE_ID
+
+    assert 'Пользователь с таким ID *не зарегистрирован* в нашем боте.' \
+        in update_mock.message.reply_text.call_args.args[0] 
+
+    # Проверка что сообщение о приглашении не улетело приглашаемому (его не существует)
+    context_mock.bot.assert_not_called()

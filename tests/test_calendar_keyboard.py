@@ -12,6 +12,7 @@ from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
 from app.handlers.states import (
     CHOOSING_ACTION,
+    CHOOSING_EDIT_FIELD,
     CHOOSING_TIME,
     CONFIRMING_DELETE,
     TYPING_EDIT_DESC,
@@ -953,3 +954,65 @@ async def test_handle_typing_edit_time_busy_time(mock_hast_time_conflict: AsyncM
     text = update_mock.message.reply_text.call_args.kwargs['text']
 
     assert 'Ошибка: это время занято' in text
+
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.generate_edit_fields_keyboard')
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.get_events_by_date')
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.toggle_event_privacy')
+async def test_handle_click_edit_private(
+    mock_toggle_event_privacy: AsyncMock,
+    mock_get_events_by_date: AsyncMock,
+    fake_keyboard: MagicMock
+):
+    # Подготовка данных
+    update_mock, context_mock, mock_con = AsyncMock(), MagicMock(), AsyncMock()
+
+    update_mock.callback_query.data = 'edit_field:private'
+
+    updated_records = [
+        {
+            'title': 'Созвон по проекту',
+            'start_time': time(9, 0),
+            'end_time': time(10, 0),
+            'description': 'Погулять с хорошим мальчиком',
+            'is_public': False,
+            'event_date': date(2026, 10, 18)
+        }
+    ]
+    mock_get_events_by_date.return_value = updated_records
+    fake_keyboard.return_value = 'fake_keyboard'
+
+    context_mock.user_data = {
+        'edit_event_id': 999,
+        'edit_event_index': 0,
+        'selected_date': date(2026, 10, 20),
+    }
+
+    update_mock.callback_query.edit_message_text = AsyncMock()
+    update_mock.effective_user.id = 123
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_con
+
+    # ВЫЗОВ
+    result: int = await handle_edit_field_click(update_mock, context_mock)
+
+    assert result == CHOOSING_EDIT_FIELD
+
+    mock_toggle_event_privacy.assert_awaited_once_with(mock_con, 999)
+    mock_get_events_by_date.assert_awaited_once_with(
+        mock_con, 123, date(2026, 10, 20)   
+    )
+    assert context_mock.user_data['event_text_record'] == updated_records
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+
+    # Проверка текста который увидет пользователь после изменения приватности заметки
+    assert '*Название*: Созвон по проекту' in kwargs['text']
+    assert '*Время*: 09:00 - 10:00' in kwargs['text']
+    assert '*Описание*: Погулять с хорошим мальчиком' in kwargs['text']
+    assert '*Доступ*: 🔒 Приватное (Только вы)' in kwargs['text']
+
+    assert kwargs['reply_markup'] == 'fake_keyboard'
+    assert kwargs['parse_mode'] == 'Markdown'
+
+    

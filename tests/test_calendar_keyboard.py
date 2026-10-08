@@ -1171,3 +1171,122 @@ async def test_handle_edit_date_selection_success(
         text="✅ Дата успешно изменена на 25.10.2026!"
     )
     mock_refresh_menu.assert_awaited_once_with(update_mock, context_mock)
+
+
+# --- 1. Клик по той же самой дате ---
+@pytest.mark.asyncio
+async def test_handle_edit_date_selection_choose_the_same_date():
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    same_date = date(2026, 10, 25)
+
+    update_mock.callback_query.data = f"calendar_day:{same_date.year}:{same_date.month}:{same_date.day}"
+    update_mock.callback_query.answer = AsyncMock()
+    context_mock.user_data = {'selected_date': same_date}
+
+    # ВЫЗОВ
+    result: int = await handle_edit_date_selection(update_mock, context_mock)
+
+    assert result == TYPING_EDIT_DATE
+    update_mock.callback_query.answer.assert_awaited_once_with(
+        '❌ Вы выбрали ту же самую дату! Выберите другой день.'
+    )
+
+
+# --- 2. Перенос события 'all_day' на занятый день ---
+@pytest.mark.asyncio
+async def test_handle_edit_date_selection_all_day_to_busy_day():
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    target_date = date(2026, 10, 25)
+
+    update_mock.callback_query.data = f"calendar_day:{target_date.year}:{target_date.month}:{target_date.day}"
+    update_mock.callback_query.answer = AsyncMock()
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 15),
+        'edit_event_id': 999,
+        'current_event_time': (None, None),
+        'month_busy_days': {target_date.day: 'partial'},
+    }
+
+    # ВЫЗОВ
+    result: int = await handle_edit_date_selection(update_mock, context_mock)
+
+    assert result == TYPING_EDIT_DATE
+    update_mock.callback_query.answer.assert_awaited_once_with(
+        "❌ Ошибка: Нельзя перенести событие 'Весь день' на эту дату, так как день уже занят другими делами!"
+    )
+
+
+# --- 3. Перенос интервала на день, занятый событием 'Весь день' ---
+@pytest.mark.asyncio
+async def test_handle_edit_date_selection_target_has_all_day_event():
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    user_id = 777
+    target_date = date(2026, 10, 25)
+
+    update_mock.callback_query.data = f"calendar_day:{target_date.year}:{target_date.month}:{target_date.day}"
+    update_mock.callback_query.answer = AsyncMock()
+    update_mock.effective_user.id = user_id
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 15),
+        'edit_event_id': 999,
+        'current_event_time': (time(8, 30), time(10, 0)),
+        'month_busy_days': {target_date.day: 'full'},
+    }
+
+    mock_conn = AsyncMock()
+    mock_conn.fetchval.return_value = True
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
+
+    # ВЫЗОВ
+    result: int = await handle_edit_date_selection(update_mock, context_mock)
+
+    assert result == TYPING_EDIT_DATE
+
+    sql_query = mock_conn.fetchval.call_args.args[0]
+    assert 'SELECT EXISTS' in sql_query
+    assert "WHERE user_id = $1 AND event_date = $2 AND event_type = 'all_day'" in sql_query
+    assert mock_conn.fetchval.call_args.args[1] == user_id
+    assert mock_conn.fetchval.call_args.args[2] == target_date
+
+    update_mock.callback_query.answer.assert_awaited_once_with(
+        "❌ Ошибка: Этот день полностью занят событием 'Весь день'!"
+    )
+
+
+# --- 4. Конфликт времени при переносе интервала ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.has_time_conflict')
+async def test_handle_edit_date_selection_time_conflict(mock_has_time_conflict: AsyncMock):
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    user_id = 777
+    target_date = date(2026, 10, 25)
+    start = time(8, 30)
+    end = time(10, 0)
+
+    update_mock.callback_query.data = f"calendar_day:{target_date.year}:{target_date.month}:{target_date.day}"
+    update_mock.callback_query.answer = AsyncMock()
+    update_mock.effective_user.id = user_id
+    mock_has_time_conflict.return_value = True
+
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 15),
+        'edit_event_id': 999,
+        'current_event_time': (start, end),
+        'month_busy_days': {target_date.day: 'partial'},
+    }
+
+    mock_conn = AsyncMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
+
+    # ВЫЗОВ
+    result: int = await handle_edit_date_selection(update_mock, context_mock)
+
+    assert result == TYPING_EDIT_DATE
+    mock_has_time_conflict.assert_awaited_once_with(
+        mock_conn, user_id, target_date, start, end, exclude_event_id=None
+    )
+    update_mock.callback_query.answer.assert_awaited_once_with(
+        "❌ Ошибка: Выбранное время на этой дате уже занято другим событием!"
+    )

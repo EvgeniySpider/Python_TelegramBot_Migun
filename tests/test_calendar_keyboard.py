@@ -6,7 +6,7 @@ from telegram.ext import ConversationHandler
 from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
-from app.handlers.calendar_edit_flow import handle_edit_field_click, handle_edit_field_date, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
+from app.handlers.calendar_edit_flow import handle_edit_date_selection, handle_edit_field_click, handle_edit_field_date, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
 from app.handlers.calendar_invite import handle_invitee_id_input
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
@@ -1100,3 +1100,74 @@ async def test_handle_edit_field_date_click_new_day(mock_get_busy_days: AsyncMoc
 
     # Проверяем наличие кнопки возврата к редактированию
     assert any(btn.callback_data == "back_to_edit_menu" for btn in all_buttons)
+
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow._refresh_day_menu_after_edit')
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.has_time_conflict')
+async def test_handle_edit_date_selection_success(
+    mock_has_time_conflict: AsyncMock,
+    mock_refresh_menu: AsyncMock
+):
+    # 1. Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.callback_query.data = "calendar_day:2026:10:25"
+    update_mock.callback_query.answer = AsyncMock()
+    update_mock.effective_user.id = 777
+
+    old_date = date(2026, 10, 15)
+    target_date = date(2026, 10, 25)
+    start = time(14, 0)
+    end = time(15, 30)
+
+    context_mock.user_data = {
+        'selected_date': old_date,
+        'edit_event_id': 999,
+        'current_event_time': (start, end),
+        'month_busy_days': {},  # Целевой день полностью свободен
+        'is_editing_date_mode': True
+    }
+
+    mock_conn = AsyncMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
+    mock_has_time_conflict.return_value = False
+
+    context_mock.application.stats_repository.increment_metric = AsyncMock()
+    context_mock.application.stats_repository.increment_user_metric = AsyncMock()
+    mock_refresh_menu.return_value = CHOOSING_ACTION
+
+    # 2. Вызов
+    result: int = await handle_edit_date_selection(update_mock, context_mock)
+
+    # 3. Проверки
+    assert result == CHOOSING_ACTION
+
+    # Проверка вызова валидатора времени в БД
+    mock_has_time_conflict.assert_awaited_once_with(
+        mock_conn, 777, target_date, start, end, exclude_event_id=None
+    )
+
+    # Проверка SQL-запроса на обновление даты
+    mock_conn.execute.assert_awaited_once_with(
+        "UPDATE events SET event_date = $1 WHERE id = $2",
+        target_date, 999
+    )
+
+    # Проверка обновления ОЗУ и удаления флага режима редактирования
+    assert context_mock.user_data['selected_date'] == target_date
+    assert 'is_editing_date_mode' not in context_mock.user_data
+
+    # Проверка статистики
+    context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
+        'events_edited'
+    )
+    context_mock.application.stats_repository.increment_user_metric.assert_awaited_once_with(
+        777, 'events_edited'
+    )
+
+    # Проверка ответа пользователю и вызова обновления меню
+    update_mock.callback_query.answer.assert_awaited_once_with(
+        text="✅ Дата успешно изменена на 25.10.2026!"
+    )
+    mock_refresh_menu.assert_awaited_once_with(update_mock, context_mock)

@@ -1,11 +1,12 @@
 from datetime import datetime, date, time
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler
 from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
-from app.handlers.calendar_edit_flow import handle_edit_field_click, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
+from app.handlers.calendar_edit_flow import handle_edit_field_click, handle_edit_field_date, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
 from app.handlers.calendar_invite import handle_invitee_id_input
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
@@ -15,6 +16,7 @@ from app.handlers.states import (
     CHOOSING_EDIT_FIELD,
     CHOOSING_TIME,
     CONFIRMING_DELETE,
+    TYPING_EDIT_DATE,
     TYPING_EDIT_DESC,
     TYPING_EDIT_TIME,
     TYPING_EDIT_TITLE,
@@ -956,7 +958,6 @@ async def test_handle_typing_edit_time_busy_time(mock_hast_time_conflict: AsyncM
     assert 'Ошибка: это время занято' in text
 
 
-
 @pytest.mark.asyncio
 @patch('app.handlers.calendar_edit_flow.generate_edit_fields_keyboard')
 @patch('app.handlers.calendar_edit_flow.CalendarRepository.get_events_by_date')
@@ -1015,4 +1016,87 @@ async def test_handle_click_edit_private(
     assert kwargs['reply_markup'] == 'fake_keyboard'
     assert kwargs['parse_mode'] == 'Markdown'
 
-    
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.handle_edit_field_date')
+async def test_handle_edit_field_date_choice(mock_handle_edit_field_date: AsyncMock):
+    # Подготовка данных
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    mock_handle_edit_field_date.return_value = TYPING_EDIT_DATE
+    update_mock.callback_query.data = 'edit_field:date'
+
+    # ВЫЗОВ
+    result: int = await handle_edit_field_click(update_mock, context_mock)
+
+    # Проверки
+    assert result == TYPING_EDIT_DATE
+    mock_handle_edit_field_date.assert_awaited_once_with(update_mock, context_mock)
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.CalendarService.get_user_busy_days')
+async def test_handle_edit_field_date_click_new_day(mock_get_busy_days: AsyncMock):
+    # 1. Подготовка данных
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    update_mock.effective_user.id = 555
+
+    # Выбираем дату, для которой будем проверять белый кружок
+    selected_day = 15
+    selected_date = date(2026, 10, selected_day)
+    context_mock.user_data = {
+        'selected_date': selected_date
+    }
+
+    mock_conn = AsyncMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
+
+    # Имитируем занятые дни месяца (частично и полностью)
+    mock_busy_days = {10: 'partial', 20: 'full'}
+    mock_get_busy_days.return_value = mock_busy_days
+
+    # 2. Вызов хэндлера
+    result: int = await handle_edit_field_date(update_mock, context_mock)
+
+    # 3. Базовые проверки стейта и контекста
+    assert result == TYPING_EDIT_DATE
+    assert context_mock.user_data['is_editing_date_mode'] is True
+    assert context_mock.user_data['month_busy_days'] == mock_busy_days
+
+    mock_get_busy_days.assert_awaited_once_with(
+        conn=mock_conn,
+        user_id=555,
+        year=2026,
+        month=10
+    )
+
+    # 4. Проверка текста сообщения
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    assert "Изменение даты события" in kwargs['text']
+    assert "15.10.2026" in kwargs['text']
+    assert kwargs['parse_mode'] == "Markdown"
+
+    # 5. Проверка клавиатуры: ищем все кнопки на сетке
+    markup: InlineKeyboardMarkup = kwargs['reply_markup']
+    all_buttons = [btn for row in markup.inline_keyboard for btn in row]
+
+    white_index, yellow_index, red_index = 25, 20, 30
+
+    # Проверка редактируемой даты
+    changeable_day: InlineKeyboardButton = all_buttons[white_index]
+    assert changeable_day.text == '⚪ 15'
+    assert changeable_day.callback_data == f'calendar_day:2026:10:{selected_day}'
+
+    # Дополнительно: проверяем, что обычные маркеры занятости тоже отрисовались
+    assert all_buttons[yellow_index].text == '🟡 10'
+    assert all_buttons[red_index].text == '🔴 20'
+
+    used_buttons_text = {'🔴 20', '🟡 10', '⚪ 15'}
+
+    unexpected_marked_buttons = [
+        btn.text for btn in all_buttons 
+        if btn.text not in used_buttons_text and btn.text.startswith(('🔴', '🟡', '⚪'))
+    ]
+    assert unexpected_marked_buttons == []
+
+    # Проверяем наличие кнопки возврата к редактированию
+    assert any(btn.callback_data == "back_to_edit_menu" for btn in all_buttons)

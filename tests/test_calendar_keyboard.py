@@ -880,3 +880,76 @@ async def test_handle_typing_edit_time_positive(
     context_mock.application.stats_repository.increment_user_metric.assert_awaited_once_with(
         100, 'events_edited'
     )
+
+
+@pytest.mark.asyncio
+async def test_handle_typing_edit_time_incorrect_pattern():
+    # Подготовка данных
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    update_mock.message.text = 'Чушь а не время'
+
+    # ВЫЗОВ
+    result: int = await handle_typing_edit_time(update_mock, context_mock)
+
+    # Проверяем что остались на том же state-е
+    assert result == TYPING_EDIT_TIME
+
+    text = update_mock.message.reply_text.call_args.kwargs['text']
+
+    assert 'Неверный формат времени' in text
+    assert 'Пожалуйста, введите интервал (например: 9-10, 09:30-11 или 15:00-16:30)' in text
+
+
+@pytest.mark.asyncio
+async def test_handle_typing_edit_time_unexistent_time():
+    # Подготовка данных
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    # Такого времени не существует
+    update_mock.message.text = '24:30-25:30'
+
+    # ВЫЗОВ
+    result: int = await handle_typing_edit_time(update_mock, context_mock)
+
+    # Проверяем что остались на том же state-е
+    assert result == TYPING_EDIT_TIME
+    
+    text = update_mock.message.reply_text.call_args.kwargs['text']
+
+    assert 'Введено некорректное время суток (максимум 23:59)' in text
+
+
+@pytest.mark.asyncio
+async def test_handle_typing_edit_time_reversed_time():
+    # Подготовка данных
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    # Время начала больше времени окончания
+    update_mock.message.text = '17:30-16:30'
+
+    # ВЫЗОВ
+    result: int = await handle_typing_edit_time(update_mock, context_mock)
+
+    # Проверяем что остались на том же state-е
+    assert result == TYPING_EDIT_TIME
+    
+    text = update_mock.message.reply_text.call_args.kwargs['text']
+
+    assert 'Ошибка: время начала не может быть позже времени окончания' in text
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.has_time_conflict')
+async def test_handle_typing_edit_time_busy_time(mock_hast_time_conflict: AsyncMock):
+    # Подготовка данных
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    update_mock.message.text = '14:30-15:30'
+    mock_hast_time_conflict.return_value = True
+
+    # ВЫЗОВ
+    result: int = await handle_typing_edit_time(update_mock, context_mock)
+
+    # Проверяем что остались на том же state-е
+    assert result == TYPING_EDIT_TIME
+    
+    text = update_mock.message.reply_text.call_args.kwargs['text']
+
+    assert 'Ошибка: это время занято' in text

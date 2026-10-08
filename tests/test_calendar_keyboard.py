@@ -7,7 +7,7 @@ from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
 from app.handlers.calendar_edit_flow import handle_edit_date_selection, handle_edit_field_click, handle_edit_field_date, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
-from app.handlers.calendar_invite import handle_invitee_id_input
+from app.handlers.calendar_invite import handle_invitee_id_input, handle_show_meetings
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
@@ -1290,3 +1290,90 @@ async def test_handle_edit_date_selection_time_conflict(mock_has_time_conflict: 
     update_mock.callback_query.answer.assert_awaited_once_with(
         "❌ Ошибка: Выбранное время на этой дате уже занято другим событием!"
     )
+
+
+class AsyncMockQuerySet:
+    """Универсальный мок-генератор для асинхронных запросов Django ORM."""
+    def __init__(self, items):
+        self.items = items
+
+    async def __aiter__(self):
+        for item in self.items:
+            yield item
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.generate_back_calendar_button')
+@patch('app.handlers.calendar_invite.Appointment')
+async def test_handle_show_meetings_as_host_and_guest(
+    mock_Appointment: MagicMock,
+    mock_gen_button: MagicMock
+):
+    # 1. Подготовка данных пользователя
+    my_telegram_id = 111111111
+    friend_telegram_id = 8915759698
+
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.callback_query.from_user.id = my_telegram_id
+    update_mock.callback_query.edit_message_text = AsyncMock()
+    mock_gen_button.return_value = "fake_back_button"
+
+    # --- Встреча 1: Я организатор ---
+    event_host = MagicMock()
+    event_host.user_id = my_telegram_id
+    event_host.title = "Созвон по проекту"
+    event_host.event_date = date(2026, 10, 18)
+    event_host.start_time = time(14, 0)
+    event_host.end_time = time(15, 0)
+
+    meeting_as_host = MagicMock()
+    meeting_as_host.event = event_host
+    meeting_as_host.invitee_id = friend_telegram_id
+    meeting_as_host.get_status_display.return_value = "✅ Подтверждено"
+
+    # --- Встреча 2: Я приглашенный ---
+    event_guest = MagicMock()
+    event_guest.user_id = friend_telegram_id
+    event_guest.title = "Перекур"
+    event_guest.event_date = date(2026, 10, 21)
+    event_guest.start_time = time(10, 0)
+    event_guest.end_time = time(10, 30)
+
+    meeting_as_guest = MagicMock()
+    meeting_as_guest.event = event_guest
+    meeting_as_guest.invitee_id = my_telegram_id
+    meeting_as_guest.get_status_display.return_value = "✅ Подтверждено"
+
+    # Настраиваем цепочку ORM: select_related('event').filter(...)
+    mock_Appointment.objects.select_related.return_value.filter.return_value = AsyncMockQuerySet([
+        meeting_as_host,
+        meeting_as_guest
+    ])
+
+    # 2. Вызов хэндлера
+    await handle_show_meetings(update_mock, context_mock)
+
+    # 3. Проверки
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    result_text = kwargs['text']
+
+    # Проверяем блок "Назначенные мною встречи"
+    assert "*🤝 Назначенные мною встречи:*" in result_text
+    assert "*1. Созвон по проекту*" in result_text
+    assert "📅 Дата: 18.10.2026 | ⏰ Время: 14:00 - 15:00" in result_text
+    assert f"👤 Приглашенный: ID {friend_telegram_id}" in result_text
+    assert "📊 Статус: ✅ Подтверждено" in result_text
+
+    # Проверяем визуальный разделитель
+    assert "➖➖➖➖➖➖➖➖➖➖" in result_text
+
+    # Проверяем блок "Приглашения для меня"
+    assert "*📩 Приглашения для меня:*" in result_text
+    assert "*1. Перекур*" in result_text
+    assert "📅 Дата: 21.10.2026 | ⏰ Время: 10:00 - 10:30" in result_text
+    assert f"👑 Организатор: ID {friend_telegram_id}" in result_text
+
+    # Проверяем параметры вызова Telegram API
+    assert kwargs['parse_mode'] == "Markdown"
+    assert kwargs['reply_markup'] == "fake_back_button"

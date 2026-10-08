@@ -10,7 +10,8 @@ from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_act_with_options import confirm_to_delete
 from app.handlers.calendar_delete_event import del_event_on_info, prepare_after_delete
-from app.handlers.states import CONFIRMING_DELETE
+from app.handlers.calendar_edit_flow import _refresh_day_menu_after_edit
+from app.handlers.states import CHOOSING_ACTION, CONFIRMING_DELETE
 from app.handlers.utils import get_validated_event_index, notify_and_cancel_appointments
 
 
@@ -489,3 +490,60 @@ async def test_prepare_after_delete(mock_calendar_command: AsyncMock):
 
     query.answer.assert_awaited_once_with(text='🗑️ Мероприятие успешно удалено!')
     mock_calendar_command.assert_awaited_once_with(update_mock, context_mock)
+
+
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.handle_options_with_exist_notes_in_day')
+@patch('app.handlers.calendar_edit_flow.build_detailed_event_text')
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.get_events_by_date')
+async def test_refresh_day_menu_after_edit(
+    mock_get_events: AsyncMock,
+    mock_build_card: MagicMock,
+    mock_handle_options: AsyncMock
+):
+    # 1. Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.effective_user.id = 123
+    update_mock.message = MagicMock()  # source будет update
+
+    test_date = date(2026, 10, 20)
+    context_mock.user_data = {
+        'selected_date': test_date,
+        'edit_success_status': '✅ Название успешно изменено!'
+    }
+
+    mock_conn = AsyncMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
+
+    # Имитируем 2 записи в базе
+    mock_records = [{'id': 1}, {'id': 2}]
+    mock_get_events.return_value = mock_records
+    mock_build_card.side_effect = lambda records, index, numbered: f"Card {index}"
+    mock_handle_options.return_value = CHOOSING_ACTION
+
+    # 2. Вызов
+    result: int = await _refresh_day_menu_after_edit(update_mock, context_mock)
+
+    # 3. Проверки
+    assert result == CHOOSING_ACTION
+
+    # Проверка синхронизации с базой и обновления ОЗУ
+    mock_get_events.assert_awaited_once_with(mock_conn, 123, test_date)
+    assert context_mock.user_data['event_text_record'] == mock_records
+
+    # Проверка, что статус успеха извлечен и удален из user_data
+    assert 'edit_success_status' not in context_mock.user_data
+
+    # Проверка отрисовки карточек для каждой записи
+    assert mock_build_card.call_count == 2
+
+    # Проверка вызова меню с итоговым текстом, кортежем даты и баннером успеха
+    expected_text = "Card 0\nCard 1\n"
+    expected_header = "✅ Название успешно изменено!\n\n"
+    mock_handle_options.assert_awaited_once_with(
+        expected_text,
+        (update_mock, test_date.day, test_date.month, test_date.year),
+        header=expected_header
+    )

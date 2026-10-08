@@ -5,7 +5,7 @@ from telegram.ext import ConversationHandler
 from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
-from app.handlers.calendar_edit_flow import handle_edit_field_click, handle_typing_edit_desc, handle_typing_edit_title
+from app.handlers.calendar_edit_flow import handle_edit_field_click, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
 from app.handlers.calendar_invite import handle_invitee_id_input
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
@@ -15,6 +15,7 @@ from app.handlers.states import (
     CHOOSING_TIME,
     CONFIRMING_DELETE,
     TYPING_EDIT_DESC,
+    TYPING_EDIT_TIME,
     TYPING_EDIT_TITLE,
     TYPING_INVITEE_ID,
     WAITING_FOR_TIME_INPUT_EXACT,
@@ -681,7 +682,7 @@ async def test_handle_invitee_id_input_telegram_error(
 
 
 @pytest.mark.asyncio
-async def test_handle_edit_field_click():
+async def test_handle_edit_field_click_title():
     # Подготовка данных
     update_mock, context_mock = MagicMock(), MagicMock()
     update_mock.callback_query.data = 'edit_field:title'
@@ -800,3 +801,82 @@ async def test_handle_typing_edit_desc(
     
     # Проверка статуса
     assert 'Описание события успешно изменено' in context_mock.user_data['edit_success_status']
+
+
+# --- 1. ПРЕАМБУЛА: Клик по кнопке "Время" ---
+@pytest.mark.asyncio
+async def test_handle_edit_field_click_time():
+    # Подготовка данных
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.callback_query.data = 'edit_field:time'
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    # Вызов
+    result: int = await handle_edit_field_click(update_mock, context_mock)
+
+    # Проверки
+    assert result == TYPING_EDIT_TIME
+
+    kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
+    assert 'Введите новый временной интервал для этого события' in kwargs['text']
+
+# --- 2. Проверка валидного времени и сохранения его в БД ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_edit_flow.CalendarRepository.has_time_conflict')
+@patch('app.handlers.calendar_edit_flow._refresh_day_menu_after_edit')
+async def test_handle_typing_edit_time_positive(
+    mock_refresh_day_menu_after_edit: AsyncMock,
+    mock_has_time_conflict: AsyncMock
+):
+    # Подготовка данных
+    mock_refresh_day_menu_after_edit.return_value = CHOOSING_ACTION
+    update_mock, context_mock, mock_con = AsyncMock(), MagicMock(), AsyncMock()
+
+    update_mock.message.text = ' 12:30 - 13:30 '
+    context_mock.user_data = {
+        'selected_date': date(2026, 10, 20),
+        'edit_event_id': '999'
+    }
+    update_mock.effective_user.id = 100
+
+    context_mock.application.database.connection.return_value.__aenter__.return_value = mock_con
+    # Указываем что новое время события не занято
+    mock_has_time_conflict.return_value = False
+
+    context_mock.application.stats_repository.increment_metric = AsyncMock()
+    context_mock.application.stats_repository.increment_user_metric = AsyncMock()
+
+    # ВЫЗОВ
+    result: int = await handle_typing_edit_time(update_mock, context_mock)
+
+    assert result == CHOOSING_ACTION
+
+    mock_has_time_conflict.assert_awaited_once_with(
+        mock_con, 100, date(2026, 10, 20), time(12, 30), time (13, 30), 999
+    )
+    # Проверяем что подключение к БД вызывалось 2 раза
+    assert context_mock.application.database.connection.call_count == 2
+
+    args: tuple = mock_con.execute.call_args.args
+
+    sql_query = args[0]
+    assert 'UPDATE events' in sql_query
+    assert 'SET start_time = $1' in sql_query
+    assert 'end_time = $2' in sql_query
+    assert "event_type = 'interval'" in sql_query
+    assert 'WHERE id = $3' in sql_query
+
+    start_time, end_time, event_id = args[1], args[2], args[3]
+    assert start_time == time(12, 30)
+    assert end_time == time (13, 30)
+    assert event_id == 999
+
+    assert 'Время события успешно изменено' in context_mock.user_data['edit_success_status']
+
+    context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
+        'events_edited'
+    )
+
+    context_mock.application.stats_repository.increment_user_metric.assert_awaited_once_with(
+        100, 'events_edited'
+    )

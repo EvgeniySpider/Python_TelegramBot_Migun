@@ -357,7 +357,7 @@ async def handle_show_public_events_another_user(update: Update, context: Contex
     is_valid, validation_result = validate_telegram_id_input(
         input_text=update.message.text,
         current_user_id=update.effective_user.id,
-        self_error_msg="❌ В этом меню не можете смотреть свои заметки. Введите ID другого пользователя:"
+        self_error_msg="❌ В этом меню Вы не можете смотреть свои заметки. Введите ID другого пользователя:"
     )
 
     if not is_valid:

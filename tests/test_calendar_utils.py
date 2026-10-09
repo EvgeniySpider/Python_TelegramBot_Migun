@@ -12,7 +12,7 @@ from app.handlers.calendar_act_with_options import confirm_to_delete
 from app.handlers.calendar_delete_event import del_event_on_info, prepare_after_delete
 from app.handlers.calendar_edit_flow import _refresh_day_menu_after_edit
 from app.handlers.states import CHOOSING_ACTION, CONFIRMING_DELETE
-from app.handlers.utils import get_validated_event_index, notify_and_cancel_appointments
+from app.handlers.utils import get_validated_event_index, notify_and_cancel_appointments, validate_telegram_id_input
 
 
 def test_build_detailed_event_text_basic():
@@ -547,3 +547,32 @@ async def test_refresh_day_menu_after_edit(
         (update_mock, test_date.day, test_date.month, test_date.year),
         header=expected_header
     )
+
+
+@pytest.mark.parametrize(
+    "input_text, current_user_id, expected",
+    [
+        # Happy path: обычный ID, пробелы по краям режутся
+        ("  987654321  ", 11111, (True, 987654321)),
+        # Happy path: без пробелов
+        ("123456789", 11111, (True, 123456789)),
+        # Ошибка: не цифры
+        ("abc123", 11111, (False, "❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:")),
+        # Ошибка: пустая строка (после strip тоже не digit)
+        ("   ", 11111, (False, "❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:")),
+        # Ошибка: свой ID
+        ("11111", 11111, (False, "custom_self_error")),
+    ]
+)
+def test_validate_telegram_id_input(
+    input_text: str,
+    current_user_id: int,
+    expected: tuple[bool, int | str]
+):
+    result = validate_telegram_id_input(
+        input_text=input_text,
+        current_user_id=current_user_id,
+        self_error_msg="custom_self_error"
+    )
+
+    assert result == expected

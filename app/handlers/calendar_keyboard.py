@@ -1,6 +1,11 @@
 import calendar
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+RU_MONTHS = {
+    1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель",
+    5: "Май", 6: "Июнь", 7: "Июль", 8: "Август",
+    9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь"
+}
 
 def generate_calendar_keyboard(
     year: int, month: int,
@@ -13,22 +18,7 @@ def generate_calendar_keyboard(
     if busy_days is None:
         busy_days = {}
 
-    RU_MONTHS = {
-        1: "Январь",
-        2: "Февраль",
-        3: "Март",
-        4: "Апрель",
-        5: "Май",
-        6: "Июнь",
-        7: "Июль",
-        8: "Август",
-        9: "Сентябрь",
-        10: "Октябрь",
-        11: "Ноябрь",
-        12: "Декабрь"
-    }
-
-    month_name = RU_MONTHS[month]
+    month_name: str = RU_MONTHS[month]
 
     keyboard = []
 

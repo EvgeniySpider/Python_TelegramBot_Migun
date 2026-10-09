@@ -2,6 +2,7 @@ from rest_framework import generics
 import requests
 from rest_framework.permissions import IsAuthenticated
 import logging
+import threading
 
 from app.main import settings
 from events.models import Appointment, Event
@@ -127,7 +128,12 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                     f"📅 *Дата*: {date_str}\n"
                     f"⏰ *Время*: {time_str}"
                 )
-                send_tg_message(invitee_id, msg)
+                # Запускаем отправку сообщения в фоновом потоке
+                threading.Thread(
+                    target=send_tg_message, 
+                    args=(invitee_id, msg),
+                    daemon=True  # Поток умрет вместе с основным процессом, если сервер остановят
+                ).start()
                 
         # ==========================================
         # СЦЕНАРИЙ Б: Пользователь — РЕБЕНОК (приглашенный)
@@ -149,7 +155,12 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                     f"📅 *Дата*: {date_str}\n"
                     f"⏰ *Время*: {time_str}"
                 )
-                send_tg_message(organizer_id, msg)
+                # Запускаем отправку сообщения в фоновом потоке
+                threading.Thread(
+                    target=send_tg_message, 
+                    args=(organizer_id, msg),
+                    daemon=True
+                ).start()
                 
                 # Удаляем только связь, событие организатора остается
                 appt_as_invitee.delete()

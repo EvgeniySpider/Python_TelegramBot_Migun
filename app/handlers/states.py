@@ -1,21 +1,26 @@
-CHOOSING_ACTION = 0
-CHOOSING_TIME = 1
-WAITING_FOR_TITLE = 2
-WAITING_FOR_DESC_CHOICE = 3
-WAITING_FOR_DESCRIPTION = 4
-WAITING_FOR_TIME_INPUT_EXACT = 5
-WAITING_FOR_TIME_INPUT_INTERVAL = 6
-CONFIRMING_DELETE = 7
-CHOOSING_EVENT_TO_DELETE = 8
-TYPING_EVENT_NUMBER_TO_DELETE = 9
-CHOOSING_EDIT_FIELD = 10
-SELECTING_EDIT_EVENT = 11
-TYPING_EDIT_NUM = 12
-TYPING_EDIT_TITLE = 13, 
-TYPING_EDIT_DESC = 14,
-TYPING_EDIT_TIME = 15,
-TYPING_EDIT_DATE = 16
-SELECTING_INVITE_EVENT = 17  # Выбор инлайн-кнопкой (2-10 событий)
-TYPING_INVITE_NUM = 18       # Ввод номера текстом (>10 событий)
-TYPING_INVITEE_ID = 19
-TYPING_PUBLIC_EVENTS_USER_ID = 20
+import itertools
+
+# Создаем генератор, который начинает с 0 и при каждом вызове next() увеличивает значение на 1
+_state = itertools.count()
+
+CHOOSING_ACTION = next(_state)
+CHOOSING_TIME = next(_state)
+WAITING_FOR_TITLE = next(_state)
+WAITING_FOR_DESC_CHOICE = next(_state)
+WAITING_FOR_DESCRIPTION = next(_state)
+WAITING_FOR_TIME_INPUT_EXACT = next(_state)
+WAITING_FOR_TIME_INPUT_INTERVAL = next(_state)
+CONFIRMING_DELETE = next(_state)
+CHOOSING_EVENT_TO_DELETE = next(_state)
+TYPING_EVENT_NUMBER_TO_DELETE = next(_state)
+CHOOSING_EDIT_FIELD = next(_state)
+SELECTING_EDIT_EVENT = next(_state)
+TYPING_EDIT_NUM = next(_state)
+TYPING_EDIT_TITLE = next(_state)
+TYPING_EDIT_DESC = next(_state)
+TYPING_EDIT_TIME = next(_state)
+TYPING_EDIT_DATE = next(_state)
+SELECTING_INVITE_EVENT = next(_state) # Выбор инлайн-кнопкой (2-10 событий)
+TYPING_INVITE_NUM = next(_state)      # Ввод номера текстом (>10 событий)
+TYPING_INVITEE_ID = next(_state)
+TYPING_PUBLIC_EVENTS_USER_ID = next(_state)

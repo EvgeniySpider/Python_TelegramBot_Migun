@@ -294,7 +294,7 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 time_str = "Весь день"
                 
-            status = status = meeting.get_status_display()
+            status = meeting.get_status_display()
 
             text_my += (
                 f"*{i}. {event.title}*\n"

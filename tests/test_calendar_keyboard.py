@@ -1377,3 +1377,30 @@ async def test_handle_show_meetings_as_host_and_guest(
     # Проверяем параметры вызова Telegram API
     assert kwargs['parse_mode'] == "Markdown"
     assert kwargs['reply_markup'] == "fake_back_button"
+
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.generate_back_calendar_button')
+@patch('app.handlers.calendar_invite.Appointment')
+async def test_handle_show_meetings_no_meetings(
+    mock_Appointment: MagicMock,
+    mock_gen_button: MagicMock
+):
+    telegram_id = 111111111
+
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.callback_query.from_user.id = telegram_id
+    update_mock.callback_query.edit_message_text = AsyncMock()
+    mock_gen_button.return_value = "fake_back_button"
+
+    # Пустой queryset
+    mock_Appointment.objects.select_related.return_value.filter.return_value = AsyncMockQuerySet([])
+
+    await handle_show_meetings(update_mock, context_mock)
+
+    update_mock.callback_query.edit_message_text.assert_awaited_once()
+    text = update_mock.callback_query.edit_message_text.call_args.kwargs['text']
+
+    assert "*🤝 Назначенные мною встречи:*\nВы никого не приглашали." in text
+    assert "*📩 Приглашения для меня:*\nВас никто не приглашал." in text

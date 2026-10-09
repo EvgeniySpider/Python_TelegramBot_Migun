@@ -7,7 +7,7 @@ from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
 from app.handlers.calendar_edit_flow import handle_edit_date_selection, handle_edit_field_click, handle_edit_field_date, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
-from app.handlers.calendar_invite import handle_ask_telegram_id_for_public_events, handle_invitee_id_input, handle_show_meetings
+from app.handlers.calendar_invite import handle_ask_telegram_id_for_public_events, handle_invitee_id_input, handle_show_meetings, handle_show_public_events_another_user
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
@@ -1432,3 +1432,185 @@ async def test_handle_ask_telegram_id_for_public_events(
         parse_mode="Markdown",
         reply_markup="fake_back_calendar_button"
     )
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_show_public_events_another_user_invalid_input(
+    mock_validate: MagicMock,
+):
+    # 1. Подготовка
+    error_msg = "❌ Telegram ID должен состоять только из цифр. Попробуйте еще раз:"
+    mock_validate.return_value = (False, error_msg)
+
+    update_mock = MagicMock()
+    update_mock.message.text = "abc"
+    update_mock.effective_user.id = 11111
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+
+    # 2. Вызов
+    result: int = await handle_show_public_events_another_user(update_mock, context_mock)
+
+    # 3. Проверки
+    assert result == TYPING_PUBLIC_EVENTS_USER_ID
+
+    update_mock.message.reply_text.assert_awaited_once_with(error_msg)
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.generate_back_calendar_button')
+@patch('app.handlers.calendar_invite.Event')
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_show_public_events_another_user_no_events(
+    mock_validate: MagicMock,
+    mock_Event: MagicMock,
+    mock_gen_back_button: MagicMock,
+):
+    # 1. Подготовка
+    mock_validate.return_value = (True, 987654321)
+    mock_gen_back_button.return_value = "fake_back_calendar_button"
+
+    # Пустой queryset с aexists=False
+    mock_qs = AsyncMockQuerySet([])
+    mock_qs.aexists = AsyncMock(return_value=False)
+    mock_Event.objects.filter.return_value.order_by.return_value = mock_qs
+
+    update_mock, context_mock = MagicMock(), MagicMock()
+    update_mock.message.text = "987654321"
+    update_mock.effective_user.id = 11111
+    update_mock.message.reply_text = AsyncMock()
+
+    # 2. Вызов
+    result: int = await handle_show_public_events_another_user(update_mock, context_mock)
+
+    # 3. Проверки
+    assert result == TYPING_PUBLIC_EVENTS_USER_ID
+
+    update_mock.message.reply_text.assert_awaited_once_with(
+        "❌ У пользователя с таким Telegram ID нет публичных событий.",
+        reply_markup="fake_back_calendar_button"
+    )
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.generate_back_calendar_button')
+@patch('app.handlers.calendar_invite.Event')
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_show_public_events_another_user_positive(
+    mock_validate: MagicMock,
+    mock_Event: MagicMock,
+    mock_gen_back_button: MagicMock
+):
+    # 1. Подготовка
+    mock_validate.return_value = (True, 987654321)
+    mock_gen_back_button.return_value = "fake_back_calendar_button"
+
+    # Реальные объекты событий (не голые MagicMock), чтобы проверить сборку dict'ов
+    event_1, event_2 = MagicMock(), MagicMock()
+    event_1.title, event_1.description = "Событие 1", "Описание 1"
+    event_1.start_time, event_1.end_time = time(10, 0), time(11, 0)
+    event_1.is_public, event_1.event_date = True, date(2026, 10, 20)
+
+    event_2.title, event_2.description = "Событие 2", "Описание 2"
+    event_2.start_time, event_2.end_time = time(15, 0), time(16, 0)
+    event_2.is_public, event_2.event_date = True, date(2026, 10, 21)
+
+    # Мок ORM-цепочки с aexists=True
+    mock_qs = AsyncMockQuerySet([event_1, event_2])
+    mock_qs.aexists = AsyncMock(return_value=True)
+    mock_Event.objects.filter.return_value.order_by.return_value = mock_qs
+
+    update_mock = MagicMock()
+    update_mock.message.text = " 987654321 "
+    update_mock.effective_user.id = 11111
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+
+    # 2. Вызов
+    result: int = await handle_show_public_events_another_user(update_mock, context_mock)
+
+    # 3. Проверка стейта
+    assert result == ConversationHandler.END
+
+    # 4. Проверка валидации (передан сырой текст с пробелами)
+    mock_validate.assert_called_once_with(
+        input_text=" 987654321 ",
+        current_user_id=11111,
+        self_error_msg="❌ В этом меню Вы не можете смотреть свои заметки. "
+                       "Введите ID другого пользователя:"
+    )
+
+    # 5. Проверка ORM-цепочки
+    mock_Event.objects.filter.assert_called_once_with(
+        user_id=987654321,
+        is_public=True
+    )
+    mock_Event.objects.filter.return_value.order_by.assert_called_once_with(
+        'event_date', 'start_time'
+    )
+    
+    # 7. Проверка финального сообщения
+    update_mock.message.reply_text.assert_awaited_once()
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+    text_public_events = kwargs['text']
+    assert '🌐 *Публичные события пользователя 987654321' in text_public_events
+
+    # Проверка текста первого события
+    assert '📝 *Просмотр события №1*' in text_public_events
+    assert '📅 *Дата*: 20.10.2026' in text_public_events
+    assert '📌 *Название*: Событие 1' in text_public_events
+    assert '⏳ *Время*: 10:00 - 11:00' in text_public_events
+    assert '🛡 *Доступ*: 👁 Публичное (Видно другим)' in text_public_events
+
+    # Проверка текста второго события
+    assert '📝 *Просмотр события №2*' in text_public_events
+    assert '📅 *Дата*: 21.10.2026' in text_public_events
+    assert '📌 *Название*: Событие 2' in text_public_events
+    assert '⏳ *Время*: 15:00 - 16:00' in text_public_events
+    assert '🛡 *Доступ*: 👁 Публичное (Видно другим)' in text_public_events
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.build_detailed_event_text')
+@patch('app.handlers.calendar_invite.generate_back_calendar_button')
+@patch('app.handlers.calendar_invite.Event')
+@patch('app.handlers.calendar_invite.validate_telegram_id_input')
+async def test_handle_show_public_events_another_user_truncation(
+    mock_validate: MagicMock,
+    mock_Event: MagicMock,
+    mock_gen_back_button: MagicMock,
+    mock_build_detailed_text: MagicMock,
+):
+    # 1. Подготовка
+    mock_validate.return_value = (True, 987654321)
+    mock_gen_back_button.return_value = "fake_button"
+
+    # Каждое событие даёт 3000 символов -> суммарно > 4000 -> должна сработать обрезка
+    mock_build_detailed_text.side_effect = ["X" * 3000, "Y" * 3000]
+
+    event_1, event_2 = MagicMock(), MagicMock()
+    mock_qs = AsyncMockQuerySet([event_1, event_2])
+    mock_qs.aexists = AsyncMock(return_value=True)
+    mock_Event.objects.filter.return_value.order_by.return_value = mock_qs
+
+    update_mock = MagicMock()
+    update_mock.message.text = "987654321"
+    update_mock.effective_user.id = 11111
+    update_mock.message.reply_text = AsyncMock()
+
+    context_mock = MagicMock()
+
+    # 2. Вызов
+    result: int = await handle_show_public_events_another_user(update_mock, context_mock)
+
+    # 3. Проверки
+    assert result == ConversationHandler.END
+
+    kwargs = update_mock.message.reply_text.call_args.kwargs
+    text: str = kwargs['text']
+
+    assert len(text) < 4100  # 4000 + суффикс обрезки
+    assert text.endswith("... (показана только часть событий)")

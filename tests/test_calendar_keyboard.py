@@ -7,7 +7,7 @@ from telegram.error import TelegramError
 
 from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
 from app.handlers.calendar_edit_flow import handle_edit_date_selection, handle_edit_field_click, handle_edit_field_date, handle_typing_edit_desc, handle_typing_edit_time, handle_typing_edit_title
-from app.handlers.calendar_invite import handle_invitee_id_input, handle_show_meetings
+from app.handlers.calendar_invite import handle_ask_telegram_id_for_public_events, handle_invitee_id_input, handle_show_meetings
 from app.handlers.calendar_keyboard import generate_calendar_keyboard
 from app.handlers.calendar_set_event import handle_set_event
 from app.handlers.commands import calendar_command
@@ -21,6 +21,7 @@ from app.handlers.states import (
     TYPING_EDIT_TIME,
     TYPING_EDIT_TITLE,
     TYPING_INVITEE_ID,
+    TYPING_PUBLIC_EVENTS_USER_ID,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TIME_INPUT_INTERVAL,
     WAITING_FOR_TITLE
@@ -1404,3 +1405,30 @@ async def test_handle_show_meetings_no_meetings(
 
     assert "*🤝 Назначенные мною встречи:*\nВы никого не приглашали." in text
     assert "*📩 Приглашения для меня:*\nВас никто не приглашал." in text
+
+
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_invite.generate_back_calendar_button')
+async def test_handle_ask_telegram_id_for_public_events(
+    mock_gen_back_button: MagicMock
+):
+    # 1. ПОДГОТОВКА МОКОВ
+    mock_gen_back_button.return_value = "fake_back_calendar_button"
+
+    update_mock = MagicMock()
+    update_mock.callback_query.edit_message_text = AsyncMock()
+
+    context_mock = MagicMock()
+
+    # 2. ВЫЗОВ ХЭНДЛЕРА
+    result: int = await handle_ask_telegram_id_for_public_events(update_mock, context_mock)
+
+    # 3. ПРОВЕРКА СТЕЙТА
+    assert result == TYPING_PUBLIC_EVENTS_USER_ID
+
+    # 4. ПРОВЕРКА ВЫЗОВА edit_message_text
+    update_mock.callback_query.edit_message_text.assert_awaited_once_with(
+        text="Отправьте *Telegram ID* пользователя, события которого хотите посмотреть:",
+        parse_mode="Markdown",
+        reply_markup="fake_back_calendar_button"
+    )

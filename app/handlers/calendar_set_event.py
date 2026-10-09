@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, time
 from telegram import Update
+from django.utils import timezone
 from telegram.ext import ContextTypes
+import re
+
 from app.handlers.states import (
     WAITING_FOR_TITLE,
     WAITING_FOR_DESC_CHOICE,
@@ -11,7 +14,6 @@ from app.handlers.states import (
 )
 from app.handlers.calendar_keyboard import generate_yes_no_keyboard
 from app.core.calendar.repositories import CalendarRepository
-import re
 from app.core.calendar.utils import (
     format_event_time,
     build_events_list_text,
@@ -246,8 +248,7 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     start_time = context.user_data.get('start_time')
     end_time = context.user_data.get('end_time')
     description = context.user_data.get('description')
-    created_at = datetime.now()
-
+    created_at = timezone.now()
 
     async with context.application.database.connection() as conn:
         await conn.execute(

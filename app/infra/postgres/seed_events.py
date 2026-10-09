@@ -3,7 +3,14 @@ from datetime import time, datetime
 from settings.config import AppSettings
 
 settings = AppSettings()
-YOUR_TELEGRAM_ID = 489090401
+
+if settings.telegram_id is None or settings.telegram_id == 12345:
+    raise RuntimeError(
+        "TELEGRAM_ID не задан в .env. "
+        "Добавь переменную (свой ID из @userinfobot) для запуска сидера."
+    )
+
+YOUR_TELEGRAM_ID = settings.telegram_id
 
 def get_current_year_and_month() -> tuple:
     """Вспомогательная функция: возвращает текущий год и месяц."""

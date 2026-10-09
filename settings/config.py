@@ -12,6 +12,7 @@ class AppSettings(BaseSettings):
     )
 
     telegram_api_key: SecretStr = Field(alias="TELEGRAM_API_KEY")
+    telegram_id: int | None = Field(default=None, alias="TELEGRAM_ID")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
     db_host: str = Field(alias="DB_HOST")

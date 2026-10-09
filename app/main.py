@@ -4,6 +4,9 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 django.setup()
 
 from telegram.ext import Application as PTBApplication, ApplicationBuilder
+from telegram.ext import TypeHandler, ContextTypes
+from telegram import Update
+from django.db import close_old_connections
 
 from app.core.stats.repositories import StatsRepository
 from app.core.users.repositories import UserRepository
@@ -12,6 +15,10 @@ from settings.config import AppSettings
 from app.handlers import HANDLERS
 from app.infra.postgres.db import Database
 
+
+async def close_db_connections(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Глобальный middleware для очистки протухших соединений Django ORM."""
+    close_old_connections()
 
 class Application(PTBApplication):
     def __init__(self, app_settings: AppSettings, **kwargs):
@@ -42,6 +49,7 @@ class Application(PTBApplication):
         self.run_polling()
 
     def _register_handlers(self):
+        self.add_handler(TypeHandler(Update, close_db_connections), group=-1)
         for handler in HANDLERS:
             self.add_handler(handler)
 

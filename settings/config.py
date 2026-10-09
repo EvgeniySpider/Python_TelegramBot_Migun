@@ -1,5 +1,6 @@
 import os
-from pydantic import Field, SecretStr
+from pydantic import Field, PostgresDsn, SecretStr, Secret
+from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,5 +24,13 @@ class AppSettings(BaseSettings):
     api_token_lifetime_minutes: int = Field(default=30, alias="API_TOKEN_LIFETIME_MINUTES")
 
     @property
-    def secret_dsn(self) -> SecretStr:
-        return SecretStr(f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}")
+    def secret_dsn(self) -> Secret[PostgresDsn]:
+        built_url = MultiHostUrl.build(
+            scheme="postgresql",
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
+            path=self.db_name,
+        )
+        return Secret(built_url)

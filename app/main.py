@@ -3,9 +3,9 @@ import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
 django.setup()
 
-from telegram.ext import Application as PTBApplication, ApplicationBuilder
-from telegram.ext import TypeHandler, ContextTypes
 from telegram import Update
+from telegram.ext import Application as PTBApplication
+from telegram.ext import ApplicationBuilder, TypeHandler
 from django.db import close_old_connections
 
 from app.core.stats.repositories import StatsRepository
@@ -16,9 +16,10 @@ from app.handlers import HANDLERS
 from app.infra.postgres.db import Database
 
 
-async def close_db_connections(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def close_db_connections(update: Update, context) -> None:
     """Глобальный middleware для очистки протухших соединений Django ORM."""
     close_old_connections()
+
 
 class Application(PTBApplication):
     def __init__(self, app_settings: AppSettings, **kwargs):
@@ -35,8 +36,6 @@ class Application(PTBApplication):
     @staticmethod
     async def initialize_dependencies(application: "Application") -> None:
         await application.database.initialize()
-        # Регистрируем команду в интерфейсе Телеграма при старте скрипта
-        # Это мгновенно включит нативную кнопку "Меню" у ВСЕХ пользователей
         await application.bot.set_my_commands([
             ("calendar", "📅 Открыть интерактивный календарь")
         ])
@@ -49,7 +48,9 @@ class Application(PTBApplication):
         self.run_polling()
 
     def _register_handlers(self):
+        # Перехватываем ВСЕ апдейты до основной логики (group=-1)
         self.add_handler(TypeHandler(Update, close_db_connections), group=-1)
+        
         for handler in HANDLERS:
             self.add_handler(handler)
 
@@ -66,23 +67,16 @@ def configure_logging():
 def create_app(app_settings: AppSettings) -> Application:
     application = (
         ApplicationBuilder()
-        .application_class(Application, kwargs={"app_settings": app_settings}) # type: ignore[arg-type]
-        .post_init(Application.initialize_dependencies) # type: ignore[arg-type]
+        .application_class(Application, kwargs={"app_settings": app_settings})
+        .post_init(Application.initialize_dependencies)
         .post_shutdown(Application.shutdown_dependencies)
         .token(app_settings.telegram_api_key.get_secret_value())
         .build()
     )
-    return application  # type: ignore[return-value]
+    return application
 
 settings = AppSettings()
 if __name__ == '__main__':
-    import asyncio
-
     configure_logging()
-
-    # Явно создаем и регистрируем event loop, так как Python 3.14+ больше не делает это автоматически
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
-    
     app = create_app(settings)
     app.run()

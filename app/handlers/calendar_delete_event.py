@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.commands import calendar_command
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_act_with_options import confirm_to_delete, handle_back_to_day_menu_click
-from app.core.calendar.utils import format_event_time, build_events_list_text
+from app.core.calendar.utils import build_detailed_event_text, format_event_time, build_events_list_text
 from app.handlers.utils import notify_and_cancel_appointments
 
 
@@ -137,7 +137,7 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
             "**все существующие заметки** на эту дату! Восстановление будет невозможно."
         )
 
-        state = await confirm_to_delete(query, events_preview, selected_date, delete_text)
+        state = await confirm_to_delete(query, events_preview, delete_text)
         return state
 
     # Если нажата inline-кнопка с номером события
@@ -151,10 +151,11 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         selected_date = context.user_data.get('selected_date')
         delete_text = f"событие № {id_event + 1}?", 'заметку.'
 
-        event_time = format_event_time(event_rec["start_time"], event_rec["end_time"]) \
-        if event_rec['start_time'] and event_rec['end_time'] else 'Весь день'
-        
-        event = f"📌 *Событие*: \\[{event_time}] {event_rec['title']}\n"
+        # ИЗМЕНЕНИЕ: Используем красивую карточку с номером
+        detailed_event_text = build_detailed_event_text(
+            event_text_record, index=id_event, numbered=True, is_show_date=True
+        )
+        event = f"{detailed_event_text}\n"
 
-        state = await confirm_to_delete(query, event, selected_date, delete_text)
+        state = await confirm_to_delete(query, event, delete_text)
         return state

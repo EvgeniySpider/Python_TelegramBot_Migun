@@ -173,21 +173,23 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         return await show_event_selection_list(query, event_text_record, action="invite")
 
     elif query.data == "action_delete":
-        # Уникальная логика, если заметка всего одна (например, сразу кнопки Да/Нет)
+        # Уникальная логика, если заметка всего одна
         if event_count == 1:
             event_rec = event_text_record[0]
-
             context.user_data['delete_event_id'] = event_rec['id']
             context.user_data['column_name'] = 'id'
 
-            first_sent = 'мероприятие на весь день?' if event_rec[
-                'event_type'] == 'all_day' else 'мероприятие?'
+            first_sent = 'мероприятие на весь день?' if event_rec['event_type'] == 'all_day' else 'мероприятие?'
             delete_text = first_sent, 'заметку.'
-            event = f'📌 *Событие*: {event_rec["title"]}\n'
+            
+            # ИЗМЕНЕНИЕ: Используем красивую карточку
+            detailed_event_text = build_detailed_event_text(
+                event_text_record, index=0, numbered=False, is_show_date=True
+            )
+            event = f"{detailed_event_text}\n"
 
-            state = await confirm_to_delete(query, event, selected_date, delete_text)
+            state = await confirm_to_delete(query, event, delete_text)
             return state
-
 
         # Если заметок больше одной — отдаем отрисовку списка помощнику
         return await show_event_selection_list(query, event_text_record, action="delete")
@@ -202,7 +204,6 @@ async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DE
 async def confirm_to_delete(
     source: Union[CallbackQuery, Update],
     event: str,
-    selected_date,
     delete_text: tuple
 ) -> int:
     """
@@ -229,7 +230,6 @@ async def confirm_to_delete(
     text_to_send = (
         f"❓ *Вы уверены, что хотите удалить {delete_text[0]}*\n\n"
         f"{event}"
-        f"📅 *Дата*: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n\n"
         f"⚠️ Это действие полностью сотрёт {delete_text[1]}"
     )
 
@@ -282,11 +282,13 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     selected_date = context.user_data.get('selected_date')
     delete_text = f"событие № {index_record + 1}?", "эту заметку."
 
-    event_time = format_event_time(
-        event_rec["start_time"], event_rec["end_time"])
-    event = f"📌 *Событие*: \\[{event_time}] {event_rec['title']}\n"
+    # ИЗМЕНЕНИЕ: Используем красивую карточку с номером
+    detailed_event_text = build_detailed_event_text(
+        event_text_record, index=index_record, numbered=True, is_show_date=True
+    )
+    event = f"{detailed_event_text}\n"
 
-    state = await confirm_to_delete(update, event, selected_date, delete_text)
+    state = await confirm_to_delete(update, event, delete_text)
     return state
 
 

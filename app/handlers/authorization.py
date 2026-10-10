@@ -1,10 +1,10 @@
-import os
 from datetime import timedelta
 from django.utils import timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from events.models import User
+from app.main import settings
 
 
 async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -21,8 +21,8 @@ async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("Сначала зарегистрируйтесь в боте (введите /start).")
         return
 
-    # Получаем время жизни из .env (по умолчанию 30 минут)
-    lifetime_minutes = int(os.getenv("API_TOKEN_LIFETIME_MINUTES", 30))
+    # Получаем время жизни токена из настроек
+    lifetime_minutes: int = settings.api_token_lifetime_minutes
     now = timezone.now()
 
     # Проверяем валидность текущего токена

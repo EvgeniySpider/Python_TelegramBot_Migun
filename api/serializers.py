@@ -130,7 +130,7 @@ class EventSerializer(ModelSerializer):
             
         return attrs
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Event):
         """Перехватываем готовый JSON перед отправкой и добавляем уведомление."""
         data = super().to_representation(instance)
         # Если событие EXACT и время было обрезано, добавляем поле warning
@@ -232,7 +232,7 @@ class EventUpdateSerializer(ModelSerializer):
 
         return attrs
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Event):
         data = super().to_representation(instance)
         if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
             data['warning'] = "Время > 23:29, поэтому время окончания было установлено 23:59"

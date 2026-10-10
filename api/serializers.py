@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from rest_framework.serializers import CharField, ModelSerializer, ValidationError
 
 from app.core.calendar.utils import format_event_time
@@ -90,10 +90,13 @@ class EventSerializer(ModelSerializer):
             if end_time:
                 raise ValidationError('Для события с типом "точное время" end_time не указывается')
             
-            # Корректное прибавление 30 минут через комбинирование даты и времени
-            start_dt = datetime.combine(event_date, start_time)
-            end_time = (start_dt + timedelta(minutes=30)).time()
-            # Сохраняем вычисленное время, чтобы оно не было None в нижнем фильтре и ушло в БД
+            # Если введено время больше чем 23:29
+            if start_time > time(23, 29):
+                end_time = time(23, 59)
+            else:
+                start_dt = datetime.combine(event_date, start_time)
+                end_time = (start_dt + timedelta(minutes=30)).time()
+
             attrs['end_time'] = end_time
 
         if event_type in [Event.EventType.INTERVAL, Event.EventType.EXACT]:
@@ -126,6 +129,14 @@ class EventSerializer(ModelSerializer):
             )
             
         return attrs
+
+    def to_representation(self, instance):
+        """Перехватываем готовый JSON перед отправкой и добавляем уведомление."""
+        data = super().to_representation(instance)
+        # Если событие EXACT и время было обрезано, добавляем поле warning
+        if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
+            data['warning'] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+        return data
 
 
 class EventUpdateSerializer(ModelSerializer):
@@ -190,8 +201,13 @@ class EventUpdateSerializer(ModelSerializer):
 
         # 4. ВАЛИДАЦИЯ EXACT И INTERVAL
         if event_type == Event.EventType.EXACT and start_time:
-            combined_dt = datetime.combine(event_date, start_time)
-            end_time = (combined_dt + timedelta(minutes=30)).time()
+            # Если пользователь в PUT/PATCH выбрал время больше 23:29
+            if start_time > time(23, 29):
+                end_time = time(23, 59)
+            else:
+                combined_dt = datetime.combine(event_date, start_time)
+                end_time = (combined_dt + timedelta(minutes=30)).time()
+
             attrs['end_time'] = end_time
 
         if event_type in [Event.EventType.INTERVAL, Event.EventType.EXACT]:
@@ -215,3 +231,9 @@ class EventUpdateSerializer(ModelSerializer):
             raise ValidationError("Конфликт времён. Выбранный интервал пересекается с другим вашим событием.")
 
         return attrs
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
+            data['warning'] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+        return data

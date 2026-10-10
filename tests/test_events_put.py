@@ -308,3 +308,63 @@ def test_put_interval_event_invalid_chronology(
     errors = response.json()
     assert 'non_field_errors' in errors
     assert 'Время начала должно быть строго раньше' in errors['non_field_errors'][0]
+
+
+@pytest.mark.django_db
+def test_patch_exact_event_late_night_truncation(auth_client: APIClient, private_event: Event):
+    """
+    Проверяет, что при частичном обновлении (PATCH) события 'exact', 
+    установка времени начала на > 23:29 приводит к обрезке end_time до 23:59
+    и добавлению предупреждения в ответ.
+    """
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+
+    # Сдвигаем время на 23:55 (что больше 23:29)
+    payload = {
+        'start_time': '23:55'
+    }
+
+    response: Response = auth_client.patch(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_200_OK
+
+    updated_event: dict = response.json()
+
+    assert updated_event['start_time'] == '23:55:00'
+    assert updated_event['end_time'] == '23:59:00'
+    assert 'warning' in updated_event
+
+    private_event.refresh_from_db()
+    assert str(private_event.start_time) == '23:55:00'
+    assert str(private_event.end_time) == '23:59:00'
+
+
+@pytest.mark.django_db
+def test_put_exact_event_late_night_truncation(auth_client: APIClient, private_event: Event):
+    """
+    Проверяет то же самое поведение обрезки времени, но для полного обновления (PUT).
+    """
+    url: str = reverse('api:private-events-detail', kwargs={'pk': private_event.id})
+
+    # Для PUT отправляем все обязательные поля (title, event_date, start_time)
+    payload = {
+        'title': 'Обновленное позднее событие',
+        'event_date': str(private_event.event_date),
+        'start_time': '23:40',
+        'is_public': False
+    }
+
+    response: Response = auth_client.put(url, data=payload, format='json')
+
+    assert response.status_code == status.HTTP_200_OK
+
+    updated_event: dict = response.json()
+
+    assert updated_event['title'] == 'Обновленное позднее событие'
+    assert updated_event['start_time'] == '23:40:00'
+    assert updated_event['end_time'] == '23:59:00'
+    assert 'warning' in updated_event
+
+    private_event.refresh_from_db()
+    assert str(private_event.start_time) == '23:40:00'
+    assert str(private_event.end_time) == '23:59:00'

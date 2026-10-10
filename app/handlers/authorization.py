@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from events.models import User
-from app.main import settings
 
 
 async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -22,6 +21,7 @@ async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     # Получаем время жизни токена из настроек
+    from app.main import settings
     lifetime_minutes: int = settings.api_token_lifetime_minutes
     now = timezone.now()
 

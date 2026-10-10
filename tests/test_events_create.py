@@ -244,6 +244,44 @@ def test_create_event_time_collisions(auth_client: APIClient, test_user: User):
     assert 'non_field_errors' in response.json()
 
 
+@pytest.mark.django_db
+def test_create_exact_event_late_night_truncation(auth_client: APIClient, test_user: User):
+    """
+    Проверяет, что при создании события 'exact' со временем начала > 23:29
+    (например, 23:45), время окончания принудительно устанавливается на 23:59,
+    и в ответе возвращается соответствующий warning.
+    """
+    url: str = reverse('api:private-events-list')
+
+    payload = {
+        'event_type': 'exact',
+        'title': 'Позднее точное событие',
+        'event_date': '2026-10-10',
+        'start_time': '23:45',
+        'is_public': False
+    }
+
+    response: Response = auth_client.post(url, data=payload, format='json')
+
+    # Проверяем успешность создания
+    assert response.status_code == status.HTTP_201_CREATED
+
+    created_event: dict = response.json()
+
+    # Проверяем, что start_time сохранился корректно, а end_time обрезался
+    assert created_event['start_time'] == '23:45:00'
+    assert created_event['end_time'] == '23:59:00'
+
+    # Проверяем наличие кастомного поля warning, добавленного через to_representation
+    assert 'warning' in created_event
+    assert created_event['warning'] == "Время > 23:29, поэтому время окончания было установлено 23:59"
+
+    # Проверяем базу данных
+    db_event = Event.objects.get(id=created_event['id'])
+    assert str(db_event.start_time) == '23:45:00'
+    assert str(db_event.end_time) == '23:59:00'
+
+
 @pytest.mark.asyncio
 @patch('app.handlers.calendar_act_with_options.handle_back_to_day_menu_click')
 @patch('app.core.calendar.services.CalendarService.get_user_busy_days')

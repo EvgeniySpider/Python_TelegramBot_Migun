@@ -106,9 +106,9 @@ async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAU
         )
         return WAITING_FOR_TIME_INPUT_INTERVAL
 
-    if end_time < start_time:
+    if end_time <= start_time:
         await update.message.reply_text(
-            text="❌ Ошибка: время начала не может быть позже времени окончания\n"
+            text="❌ Ошибка: время начала должно быть строго раньше времени окончания\n"
             "Попробуйте ещё раз:"
         )
         return WAITING_FOR_TIME_INPUT_INTERVAL
@@ -174,7 +174,7 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
     dt_end = dt_start + timedelta(minutes=30)
 
     if dt_end.date() != selected_date:
-        end_time = time(23, 59, 59)
+        end_time = time(23, 59)
     else:
         end_time = dt_end.time()
 

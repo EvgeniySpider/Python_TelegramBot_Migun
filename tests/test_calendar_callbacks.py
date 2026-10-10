@@ -214,7 +214,7 @@ async def test_handle_time_input_interval_success(mock_has_conflict: AsyncMock):
     # 2. Несуществующее время (ValueError)
     ("25:00-26:00", False, "некорректное время суток"),
     # 3. Конец раньше начала
-    ("16:00-14:00", False, "время начала не может быть позже"),
+    ("16:00-14:00", False, "время начала должно быть строго раньше времени окончания"),
     # 4. Конфликт в базе данных
     ("14:00-16:00", True, "это время занято"),
 ])
@@ -462,7 +462,7 @@ async def test_handle_time_input_exact_midnight_boundary(mock_has_conflict: Asyn
 
     assert result == WAITING_FOR_TITLE
     start_time = datetime.time(23, 50)
-    end_time = datetime.time(23, 59, 59)
+    end_time = datetime.time(23, 59)
 
     args: tuple = mock_has_conflict.call_args.args
 

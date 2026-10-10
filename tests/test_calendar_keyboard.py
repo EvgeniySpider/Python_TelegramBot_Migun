@@ -859,8 +859,8 @@ async def test_handle_typing_edit_time_positive(
     mock_has_time_conflict.assert_awaited_once_with(
         mock_con, 100, date(2026, 10, 20), time(12, 30), time (13, 30), 999
     )
-    # Проверяем что подключение к БД вызывалось 2 раза
-    assert context_mock.application.database.connection.call_count == 2
+    # Проверяем что подключение к БД вызывалось 1 раз
+    context_mock.application.database.connection.assert_called_once()
 
     args: tuple = mock_con.execute.call_args.args
 
@@ -938,7 +938,7 @@ async def test_handle_typing_edit_time_reversed_time():
     
     text = update_mock.message.reply_text.call_args.kwargs['text']
 
-    assert 'Ошибка: время начала не может быть позже времени окончания' in text
+    assert 'Ошибка: время начала должно быть строго раньше времени окончания' in text
 
 
 @pytest.mark.asyncio
@@ -1684,7 +1684,6 @@ async def test_handle_calendar_nav_click(
     header_button = markup.inline_keyboard[0][0]
     assert header_button.text == expected_title
     assert header_button.callback_data == "calendar_ignore"
-    print(header_button)
 
     # 8. Проверка, что бизнес-логика правильно расставила эмодзи статусов
     assert "🔴 5" in [btn.text for btn in all_buttons]

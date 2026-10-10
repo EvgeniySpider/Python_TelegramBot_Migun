@@ -266,9 +266,9 @@ async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_
         )
         return TYPING_EDIT_TIME
 
-    if end_time < start_time:
+    if end_time <= start_time:
         await update.message.reply_text(
-            text="❌ Ошибка: время начала не может быть позже времени окончания\n"
+            text="❌ Ошибка: время начала должно быть строго раньше времени окончания\n"
             "Попробуйте ещё раз:"
         )
         return TYPING_EDIT_TIME
@@ -289,7 +289,6 @@ async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_
             )
             return TYPING_EDIT_TIME
 
-    async with context.application.database.connection() as conn:
         await conn.execute(
             """
             UPDATE events 

@@ -1,12 +1,15 @@
+import logging
+
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ExtBot
 import datetime
 from typing import Optional
 from typing import Any
-from telegram.ext import ExtBot
+from telegram.error import TelegramError
 
 from events.models import Appointment, Event
 
+logger = logging.getLogger(__name__)
 
 async def get_validated_event_index(
     update: Update, 
@@ -114,8 +117,8 @@ async def notify_and_cancel_appointments(
             )
             try:
                 await bot.send_message(chat_id=invitee_id, text=msg, parse_mode="Markdown")
-            except Exception as e:
-                print(f"Ошибка отправки уведомления приглашённому {invitee_id}: {e}")
+            except TelegramError as e:
+                logger.warning(f"Ошибка отправки уведомления приглашённому {invitee_id}: {e}")
 
         # ==========================================
         # СЦЕНАРИЙ Б: Пользователь — РЕБЕНОК (приглашенный)
@@ -139,8 +142,8 @@ async def notify_and_cancel_appointments(
             await appt_as_invitee.adelete()
             try:
                 await bot.send_message(chat_id=organizer_id, text=msg, parse_mode="Markdown")
-            except Exception as e:
-                print(f"Ошибка отправки уведомления организатору {organizer_id}: {e}")
+            except TelegramError as e:
+                logger.warning(f"Ошибка отправки уведомления организатору {organizer_id}: {e}")
 
 
 def validate_telegram_id_input(input_text: str, current_user_id: int, self_error_msg: str) -> tuple[bool, int | str]:

@@ -231,8 +231,8 @@ def generate_confirm_invite_keyboard(appointment_id) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-def generate_back_calendar_button() -> InlineKeyboardMarkup:
+def generate_back_calendar_button(text="⬅️ Назад в календарь") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад в календарь", callback_data="calendar")]
+        [InlineKeyboardButton(text, callback_data="calendar")]
     ])
     

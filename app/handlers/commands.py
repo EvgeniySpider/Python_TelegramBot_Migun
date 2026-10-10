@@ -2,15 +2,19 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from app.core.calendar.services import CalendarService
-from app.handlers.calendar_keyboard import generate_calendar_keyboard
+from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_calendar_keyboard
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat and update.effective_user:
         # type: ignore[attr-defined]
         await context.application.user_service.register_visitor(update.effective_user.id)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Добро пожаловать!")
-
+        
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id, 
+            text="Добро пожаловать! Нажмите кнопку ниже или введите /calendar, чтобы открыть интерактивный календарь.",
+            reply_markup=generate_back_calendar_button("📅 Открыть календарь")
+        )
 
 async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """

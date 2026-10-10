@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 
 from app.core.users.repositories import UserRepository
+from app.handlers.calendar_keyboard import generate_back_calendar_button
 from app.handlers.commands import start
 
 
@@ -28,10 +29,11 @@ async def test_start_command_handler():
     # Проверяем, что в сервис передан правильный telegram_id
     mock_context.application.user_service.register_visitor.assert_called_once_with(123456789)
 
-    # Проверяем, что приветствие ушло в нужный чат нужным текстом
+    # Проверяем, что приветствие ушло в нужный чат с новым текстом и новой клавиатурой
     mock_context.bot.send_message.assert_called_once_with(
         chat_id=987654321, 
-        text="Добро пожаловать!"
+        text="Добро пожаловать! Нажмите кнопку ниже или введите /calendar, чтобы открыть интерактивный календарь.",
+        reply_markup=generate_back_calendar_button("📅 Открыть календарь")
     )
 
 

@@ -47,16 +47,16 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     # 1. Запрашиваем из базы события на этот день
     async with context.application.database.connection() as conn:
         event_text_record: list[asyncpg.Record] = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
-        context.user_data['event_text_record'] = event_text_record
-        event_count = len(event_text_record)
-        if not event_text_record:
-            events_text = "На этот день ничего не запланировано.\n"
-            return await handle_time_selection_option((query, day, month, year), events_text, is_adding=False)
-        else:
-            cards = [build_detailed_event_text(
-                event_text_record, index=i, numbered=True) for i in range(event_count)]
-            events_text = "\n".join(cards) + '\n'
-            return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
+    context.user_data['event_text_record'] = event_text_record
+    event_count = len(event_text_record)
+    if not event_text_record:
+        events_text = "На этот день ничего не запланировано.\n"
+        return await handle_time_selection_option((query, day, month, year), events_text, is_adding=False)
+    else:
+        cards = [build_detailed_event_text(
+            event_text_record, index=i, numbered=True) for i in range(event_count)]
+        events_text = "\n".join(cards) + '\n'
+        return await handle_options_with_exist_notes_in_day(events_text, (query, day, month, year))
 
 
 async def handle_options_with_exist_notes_in_day(events_text: str, args: tuple, header: str = None) -> int:

@@ -1,3 +1,4 @@
+import logging
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.error import TelegramError
@@ -12,6 +13,7 @@ from app.core.calendar.services import check_user_availability
 from app.handlers.calendar_keyboard import generate_confirm_invite_keyboard
 from app.core.calendar.utils import build_detailed_event_text
 
+logger = logging.getLogger(__name__)
 
 
 async def handle_invite_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -79,11 +81,11 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
     )
     return TYPING_INVITEE_ID
 
-
 async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Ловит и валидирует Telegram ID. Проверяет наличие пользователя в БД и его 
-    занятость. При успехе создает приглашение со статусом PENDING.
+    Ловит и валидирует Telegram ID приглашаемого (гостя). 
+    Проверяет наличие гостя в БД и его занятость. 
+    При успехе создает приглашение (status=PENDING) и отправляет гостю сообщение с кнопками Принять/Отклонить.
     """
     # Вызываем утилиту валидации
     is_valid, validation_result = validate_telegram_id_input(
@@ -103,7 +105,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     
     event_id = context.user_data.get('invite_event_id')
     if not event_id:
-        await update.message.reply_text("⚠️ Сессия устарела. Возвращаю вас в календарь.")
+        await update.message.reply_text("❗ Сессия устарела. Возвращаю вас в календарь.")
         return await calendar_command(update, context) 
 
     # 1. Проверяем, существует ли пользователь в базе (Django ORM)
@@ -117,15 +119,15 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         )
         return TYPING_INVITEE_ID
 
-    # 2. Достаем целевое событие
+    # 2. Достаем целевое событие (событие организатора)
     target_event = await Event.objects.aget(id=event_id)
     
-    # 3. Валидация пересечения временных интервалов
+    # 3. Валидация пересечения временных интервалов (свободен ли гость)
     is_busy = await check_user_availability(invitee_id, target_event)
     
     if is_busy:
         await update.message.reply_text(
-            "⚠️ К сожалению, в это время пользователь *уже занят* (у него запланировано другое событие).\n\n"
+            "❗ К сожалению, в это время пользователь *уже занят* (у него запланировано другое событие).\n\n"
             "Встреча не назначена. Выберите другое время или пригласите кого-то еще.",
             reply_markup=generate_back_to_menu_button(),
             parse_mode="Markdown"
@@ -159,12 +161,14 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         invite_text += "\nПримете приглашение?"
 
         try:
+            # Организатор (inviter) отправляет приглашение гостю (invitee)
             await context.bot.send_message(
                 chat_id=invitee_id,
                 text=invite_text,
                 reply_markup=generate_confirm_invite_keyboard(appointment.id),
                 parse_mode="Markdown"
             )
+            # Отчитываемся организатору об успехе
             await update.message.reply_text(
                 f"✅ Приглашение успешно создано!\n"
                 f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
@@ -172,18 +176,18 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode="Markdown"
             )
         except TelegramError:
+            # Гость заблокировал бота
             await update.message.reply_text(
-                "⚠️ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
+                "❗ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
                 reply_markup=generate_back_to_menu_button()
             )
             await appointment.adelete()
             
     return TYPING_INVITEE_ID
 
-
 async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Обрабатывает нажатие кнопок Принять/Отклонить в сообщении-приглашении.
+    Обрабатывает нажатие кнопок Принять/Отклонить гостем (invitee) в сообщении-приглашении.
     """
     query = update.callback_query
     await query.answer()
@@ -196,7 +200,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         # Достаем встречу вместе с объектом события через JOIN
         appointment = await Appointment.objects.select_related('event').aget(id=appointment_id)
     except Appointment.DoesNotExist:
-        await query.edit_message_text("⚠️ Это приглашение больше не существует или было отменено.")
+        await query.edit_message_text("❗ Это приглашение больше не существует или было отменено.")
         return
 
     # Защита от повторного нажатия кнопок
@@ -213,7 +217,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         
         if is_busy:
             await query.edit_message_text(
-                "⚠️ Вы не можете принять приглашение: на это время у вас уже запланировано другое событие."
+                "❗ Вы не можете принять приглашение: на это время у вас уже запланировано другое событие."
             )
             return
 
@@ -225,7 +229,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         if original_event.description:
             guest_description += f"\nОригинальное описание: {original_event.description}"
 
-        # 3. Создаем физическую копию
+        # 3. Создаем физическую копию для гостя
         await Event.objects.acreate(
             user_id=query.from_user.id,
             event_type=original_event.event_type,
@@ -237,33 +241,43 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         # 4. Меняем сообщение у гостя
-        await query.edit_message_text(
-            f"✅ Вы *приняли* приглашение на событие: {original_event.title}",
-            parse_mode="Markdown"
-        )
+        success_text = f"✅ Вы *приняли* приглашение на событие: {original_event.title}"
+        await query.edit_message_text(text=success_text, parse_mode="Markdown")
 
-        # 5. Уведомляем организатора
-        await context.bot.send_message(
-            chat_id=inviter_id,
-            text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{original_event.title}*.",
-            parse_mode="Markdown"
-        )
+        # 5. Уведомляем организатора (inviter) о решении гостя (invitee)
+        try:
+            await context.bot.send_message(
+                chat_id=inviter_id,
+                text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{original_event.title}*.",
+                parse_mode="Markdown"
+            )
+        except TelegramError as e:
+            logger.warning(f"Не удалось уведомить организатора {inviter_id} о принятии: {e}")
+            await query.edit_message_text(
+                text=f"{success_text}\n\n*Внимание:* Организатор не получил уведомление (возможно, он заблокировал бота).",
+                parse_mode="Markdown"
+            )
 
     elif action == 'reject':
-        await query.edit_message_text(
-            f"❌ Вы *отказались* от приглашения на событие: {original_event.title}",
-            parse_mode="Markdown"
-        )
+        reject_text = f"❌ Вы *отказались* от приглашения на событие: {original_event.title}"
+        await query.edit_message_text(text=reject_text, parse_mode="Markdown")
 
-        await context.bot.send_message(
-            chat_id=inviter_id,
-            text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{original_event.title}*.",
-            parse_mode="Markdown"
-        )
+        # Уведомляем организатора (inviter) об отказе гостя (invitee)
+        try:
+            await context.bot.send_message(
+                chat_id=inviter_id,
+                text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{original_event.title}*.",
+                parse_mode="Markdown"
+            )
+        except TelegramError as e:
+            logger.warning(f"Не удалось уведомить организатора {inviter_id} об отказе: {e}")
+            await query.edit_message_text(
+                text=f"{reject_text}\n\n*Внимание:* Организатор не получил уведомление (возможно, он заблокировал бота).",
+                parse_mode="Markdown"
+            )
 
         appointment.status = Appointment.Status.CANCELLED
         await appointment.asave()
-
 
 async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query

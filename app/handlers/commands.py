@@ -1,6 +1,7 @@
-from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
+from django.utils import timezone
+
 from app.core.calendar.services import CalendarService
 from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_calendar_keyboard
 
@@ -35,7 +36,7 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         month = extracted_date.month
     else:
         # Падение в дефолт (команда /calendar или чистый запуск)
-        now = datetime.now()
+        now = timezone.now()
         year = now.year
         month = now.month
 
@@ -58,7 +59,7 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         busy_days=busy_days
     )
 
-    text_content = "📅 Ваш календарь событий.\n\n Выберите день месяца ниже," \
+    text_content = "📅 Ваш календарь событий.\n\n Выберите день месяца ниже, " \
     "чтобы посмотреть расписание, добавить новую заметку или изменить существующие дела:"
 
     # 4. РАЗВЕТВЛЕНИЕ МЕТОДА ОТПРАВКИ

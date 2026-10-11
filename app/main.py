@@ -37,7 +37,10 @@ class Application(PTBApplication):
     async def initialize_dependencies(application: "Application") -> None:
         await application.database.initialize()
         await application.bot.set_my_commands([
-            ("calendar", "📅 Открыть интерактивный календарь")
+            ("calendar", "📅 Открыть интерактивный календарь"),
+            ("api_token", "🔑 Получить или обновить API-токен"),
+            ("exportjson", "📥 Выгрузить события в JSON"),
+            ("exportcsv", "📊 Выгрузить события в CSV"),
         ])
 
     @staticmethod

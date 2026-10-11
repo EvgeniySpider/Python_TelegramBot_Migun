@@ -12,7 +12,7 @@ async def handle_export_events(update: Update, context: ContextTypes.DEFAULT_TYP
     """
     user_id = update.effective_user.id
     # Получаем текст команды, убираем слеш и приводим к нижнему регистру
-    command = update.message.text.split('@')[0].strip('/').lower()
+    command = update.message.text.split()[0].split('@')[0].strip('/').lower()
     is_csv = 'csv' in command
 
     # 1. Запрашиваем ТОЛЬКО события текущего пользователя

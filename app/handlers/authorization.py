@@ -31,7 +31,8 @@ async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         expiration_time = user.api_token_created_at + timedelta(minutes=lifetime_minutes)
         if now < expiration_time:
             is_valid = True
-            minutes_left = int((expiration_time - now).total_seconds() // 60)
+            total_seconds = int((expiration_time - now).total_seconds())
+            minutes_left = max(1, total_seconds // 60)
 
     if is_valid:
         text = (

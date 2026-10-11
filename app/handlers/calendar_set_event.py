@@ -165,7 +165,7 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
         start_time = datetime.strptime(clean_time, "%H:%M").time()
     except ValueError:
         await update.message.reply_text(
-            text="❌ Введено некорректное время суток (максимум 23:59)!\n"
+            text="❌ Введено некорректное время суток (максимум 23:58)!\n"
                  "Попробуйте ещё раз:"
         )
         return WAITING_FOR_TIME_INPUT_EXACT
@@ -178,6 +178,15 @@ async def handle_time_input_exact(update: Update, context: ContextTypes.DEFAULT_
     else:
         end_time = dt_end.time()
 
+    # ЗАЩИТА: запрещаем события нулевой длительности
+    if start_time >= end_time:
+        await update.message.reply_text(
+            text="❌ Ошибка: время начала события не может быть позже 23:58!\n"
+                 "Мероприятие должно длиться хотя бы 1 минуту до конца дня (23:59).\n"
+                 "Попробуйте ещё раз:"
+        )
+        return WAITING_FOR_TIME_INPUT_EXACT
+    
     async with context.application.database.connection() as conn:
         is_busy_time = await CalendarRepository.has_time_conflict(
             conn,

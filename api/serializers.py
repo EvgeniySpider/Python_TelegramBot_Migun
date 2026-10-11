@@ -83,13 +83,15 @@ class EventSerializer(ModelSerializer):
                 )
             return attrs
 
-
         elif event_type == Event.EventType.EXACT:
             if not start_time:
                 raise ValidationError('Для события с типом "точное время" необходимо указать start_time')
             if end_time:
                 raise ValidationError('Для события с типом "точное время" end_time не указывается')
             
+            if start_time >= time(23, 59):
+                raise ValidationError('Время начала для точного события не может быть позже 23:58.')
+
             # Если введено время больше чем 23:29
             if start_time > time(23, 29):
                 end_time = time(23, 59)
@@ -201,6 +203,9 @@ class EventUpdateSerializer(ModelSerializer):
 
         # 4. ВАЛИДАЦИЯ EXACT И INTERVAL
         if event_type == Event.EventType.EXACT and start_time:
+            if start_time >= time(23, 59):
+                raise ValidationError('Время начала события не может быть позже 23:58.')
+
             # Если пользователь в PUT/PATCH выбрал время больше 23:29
             if start_time > time(23, 29):
                 end_time = time(23, 59)

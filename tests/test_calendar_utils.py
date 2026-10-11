@@ -171,11 +171,10 @@ async def test_confirm_to_delete_from_callback(mock_gen_keyboard: AsyncMock):
     source_mock = AsyncMock()
     # У source_mock по умолчанию есть любой атрибут, так что hasattr вернет True
     
-    event_text = "📌 *Событие*: \\[10:00 - 11:00] Встреча 1\n"
-    selected_date = date(2026, 10, 20)
+    event_text = "📌 Событие: [10:00 - 11:00] Встреча 1\n"
     delete_text = ("событие № 1?", "эту заметку.")
 
-    result = await confirm_to_delete(source_mock, event_text, selected_date, delete_text)
+    result = await confirm_to_delete(source_mock, event_text, delete_text)
 
     # Проверяем возврат стейта
     assert result == CONFIRMING_DELETE
@@ -189,8 +188,7 @@ async def test_confirm_to_delete_from_callback(mock_gen_keyboard: AsyncMock):
     text = kwargs['text']
     
     assert "❓ *Вы уверены, что хотите удалить событие № 1?*" in text
-    assert "📌 *Событие*: \\[10:00 - 11:00] Встреча 1" in text
-    assert "📅 *Дата*: 20.10.2026" in text
+    assert "Событие: [10:00 - 11:00] Встреча 1" in text
     assert "⚠️ Это действие полностью сотрёт эту заметку." in text
     
     assert kwargs['reply_markup'] == "keyboard_mock"
@@ -207,11 +205,10 @@ async def test_confirm_to_delete_from_text_update(mock_gen_keyboard: AsyncMock):
     # Жестко удаляем атрибут, чтобы hasattr(source, "edit_message_text") выдало False
     del source_mock.edit_message_text
     
-    event_text = "📌 *Событие*: \\[12:00 - 13:00] Встреча 2\n"
-    selected_date = date(2026, 1, 5) # Берем дату с однозначным числом месяца/дня для проверки нулей
+    event_text = "📌 Событие: [12:00 - 13:00] Встреча 2\n"
     delete_text = ("все мероприятия?", "вообще всё.")
 
-    result = await confirm_to_delete(source_mock, event_text, selected_date, delete_text)
+    result = await confirm_to_delete(source_mock, event_text, delete_text)
 
     # Проверяем возврат стейта
     assert result == CONFIRMING_DELETE
@@ -222,10 +219,9 @@ async def test_confirm_to_delete_from_text_update(mock_gen_keyboard: AsyncMock):
     # Проверяем форматирование (особенно работу форматирования даты с ведущими нулями: 05.01.2026)
     kwargs = source_mock.message.reply_text.call_args.kwargs
     text = kwargs['text']
-    
+
     assert "❓ *Вы уверены, что хотите удалить все мероприятия?*" in text
-    assert "📌 *Событие*: \\[12:00 - 13:00] Встреча 2" in text
-    assert "📅 *Дата*: 05.01.2026" in text
+    assert "Событие: [12:00 - 13:00] Встреча 2" in text
     assert "⚠️ Это действие полностью сотрёт вообще всё." in text
     
     assert kwargs['reply_markup'] == "keyboard_mock"

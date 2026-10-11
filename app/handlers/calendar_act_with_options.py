@@ -22,7 +22,7 @@ from app.handlers.calendar_keyboard import (
     generate_numbered_action_keyboard,
     generate_edit_fields_keyboard
 )
-from app.core.calendar.utils import format_event_time, build_events_list_text, build_detailed_event_text
+from app.core.calendar.utils import build_events_list_text, build_detailed_event_text
 from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
 from events.models import Appointment
 
@@ -279,7 +279,6 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     context.user_data['delete_event_id'] = event_rec['id']
     context.user_data['column_name'] = 'id'
 
-    selected_date = context.user_data.get('selected_date')
     delete_text = f"событие № {index_record + 1}?", "эту заметку."
 
     # ИЗМЕНЕНИЕ: Используем красивую карточку с номером

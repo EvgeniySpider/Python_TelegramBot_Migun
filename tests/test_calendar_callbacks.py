@@ -40,12 +40,11 @@ async def test_handle_calendar_click_free_day(mock_generate_keyboard, mock_get_e
     mock_get_events.return_value = []
     mock_generate_keyboard.return_value = "fake_time_keyboard"
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем callback_data от клика по 1 октября 2026 года
     update_mock.callback_query.data = "calendar_day:2026:10:1"
     update_mock.effective_user.id = 12345
     
-    context_mock = MagicMock()
     # Исходное состояние user_data — пустое или без флага редактирования
     context_mock.user_data = {}
     
@@ -108,12 +107,11 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
 
     mock_generate_keyboard.return_value = "fake_options_keyboard"
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "calendar_day:2026:10:20"
     update_mock.effective_user.id = 12345
     update_mock.callback_query.edit_message_text = AsyncMock()
     
-    context_mock = MagicMock()
     # Исходное состояние user_data — пустое или без флага редактирования
     context_mock.user_data = {}
     
@@ -159,7 +157,7 @@ async def test_handle_time_input_interval_success(mock_has_conflict: AsyncMock):
     # Имитируем, что выбранное время свободно (нет конфликтов)
     mock_has_conflict.return_value = False
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем текстовое сообщение от пользователя. 
     # Специально добавляем пробелы, чтобы проверить работу .strip().replace(' ', '')
     update_mock.message.text = " 14:00 - 16:30 "
@@ -168,7 +166,6 @@ async def test_handle_time_input_interval_success(mock_has_conflict: AsyncMock):
     # Точечно делаем reply_text асинхронным
     update_mock.message.reply_text = AsyncMock()
 
-    context_mock = MagicMock()
     test_date = datetime.date(2026, 10, 14)
     # Кладём в ОЗУ дату, которую "выбрали" на предыдущем шаге
     context_mock.user_data = {'selected_date': test_date}
@@ -229,12 +226,11 @@ async def test_handle_time_input_interval_negative(
     # 1. ПОДГОТОВКА
     mock_has_conflict.return_value = db_conflict
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Подставляем текст из параметров
     update_mock.message.text = input_text
     update_mock.message.reply_text = AsyncMock()
 
-    context_mock = MagicMock()
     context_mock.user_data = {'selected_date': datetime.date(2026, 10, 14)}
 
     connection_mock = MagicMock()
@@ -264,8 +260,7 @@ async def test_handle_time_input_interval_negative(
 
 @pytest.mark.asyncio
 async def test_handle_title_input():
-    update_mock = MagicMock()
-    context_mock = MagicMock()
+    update_mock, context_mock = MagicMock(), MagicMock()
     title = 'Погулять с хорошим мальчиком'
     update_mock.message.text = title
 
@@ -305,8 +300,7 @@ async def test_handle_cancel_add_description(mock_save_event_to_db: AsyncMock):
     # state который возвращается в случае callback data 'desc_no'
     mock_save_event_to_db.return_value = CHOOSING_ACTION
 
-    update_mock = AsyncMock()
-    context_mock = MagicMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
 
     update_mock.callback_query.data = 'desc_no'
     context_mock.user_data = {}
@@ -321,8 +315,7 @@ async def test_handle_cancel_add_description(mock_save_event_to_db: AsyncMock):
 
 @pytest.mark.asyncio
 async def test_handle_approve_add_description():
-    update_mock = AsyncMock()
-    context_mock = MagicMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
 
     update_mock.callback_query.data = 'desc_yes'
 
@@ -342,7 +335,7 @@ async def test_handle_time_input_exact_success(mock_has_conflict: AsyncMock):
     # Имитируем, что выбранное время свободно (нет конфликтов)
     mock_has_conflict.return_value = False
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем текстовое сообщение от пользователя. 
     # Специально добавляем пробелы, чтобы проверить работу .strip().replace(' ', '')
     update_mock.message.text = " 12:30 "
@@ -351,7 +344,6 @@ async def test_handle_time_input_exact_success(mock_has_conflict: AsyncMock):
     # Точечно делаем reply_text асинхронным
     update_mock.message.reply_text = AsyncMock()
 
-    context_mock = MagicMock()
     test_date = datetime.date(2026, 10, 20)
     # Кладём в ОЗУ дату, которую "выбрали" на предыдущем шаге
     context_mock.user_data = {'selected_date': test_date}
@@ -408,12 +400,11 @@ async def test_handle_time_input_exact_negative(
     # 1. ПОДГОТОВКА
     mock_has_conflict.return_value = db_conflict
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Подставляем текст из параметров
     update_mock.message.text = input_text
     update_mock.message.reply_text = AsyncMock()
 
-    context_mock = MagicMock()
     context_mock.user_data = {'selected_date': datetime.date(2026, 10, 20)}
 
     connection_mock = MagicMock()
@@ -444,13 +435,12 @@ async def test_handle_time_input_exact_negative(
 @patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')
 async def test_handle_time_input_exact_midnight_boundary(mock_has_conflict: AsyncMock):
     mock_has_conflict.return_value = False
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.message.text = " 23:50 "
     update_mock.effective_user.id = 12345
     
     update_mock.message.reply_text = AsyncMock()
 
-    context_mock = MagicMock()
     test_date = datetime.date(2026, 10, 20)
 
     context_mock.user_data = {'selected_date': test_date}
@@ -478,10 +468,9 @@ async def test_handle_time_input_exact_midnight_boundary(mock_has_conflict: Asyn
 
 @pytest.mark.asyncio
 async def test_handle_options_click_create_full_day():
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_create"
     
-    context_mock = MagicMock()
     # Имитируем, что день полностью забит ('full')
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
@@ -505,11 +494,9 @@ async def test_handle_options_click_create_full_day():
 async def test_handle_options_click_create_success(mock_keyboard):
     mock_keyboard.return_value = "fake_keyboard"
     
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_create"
     
-    context_mock = MagicMock()
-
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'month_busy_days': {}, # Нет метки 'full'
@@ -550,11 +537,10 @@ async def test_handle_options_click_edit_one_event_is_invitee(mock_is_invitee: A
     # Имитируем, что пользователя пригласили на эту встречу
     mock_is_invitee.return_value = True
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
     update_mock.effective_user.id = 12345
 
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'event_text_record': [
@@ -600,10 +586,9 @@ async def test_handle_options_click_edit_one_event_is_organizer(
     aexists_mock = AsyncMock(return_value=True)
     mock_appointment.objects.filter.return_value.aexists = aexists_mock
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
-
-    context_mock = MagicMock()
+ 
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'event_text_record': [
@@ -639,11 +624,9 @@ async def test_handle_options_click_edit_one_event(
     aexists_mock = AsyncMock(return_value=False)
     mock_appointment.objects.filter.return_value.aexists = aexists_mock
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
     update_mock.effective_user.id = 12345
-
-    context_mock = MagicMock()
 
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
@@ -702,10 +685,9 @@ async def test_handle_options_click_edit_one_event(
 @pytest.mark.asyncio
 async def test_handle_options_click_edit_multiple_events_inline():
     # ПОДГОТОВКА
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
     
-    context_mock = MagicMock()
     # Кладем 2 события, чтобы сработал сценарий event_count < 11
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
@@ -755,10 +737,8 @@ async def test_handle_options_click_edit_multiple_events_inline():
 @pytest.mark.asyncio
 async def test_handle_options_click_edit_too_many_events_text_input():
     # ПОДГОТОВКА
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
-    
-    context_mock = MagicMock()
     
     # Генерируем 11 событий через list comprehension
     event_list = [
@@ -824,7 +804,7 @@ async def test_handle_options_click_delete_one_event_various_types(
     # ПОДГОТОВКА
     mock_confirm_to_delete.return_value = CONFIRMING_DELETE
     
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_delete"
     
     test_date = date(2026, 10, 20)
@@ -842,7 +822,6 @@ async def test_handle_options_click_delete_one_event_various_types(
         }
     ]
 
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': test_date,
         'event_text_record': event_record
@@ -874,10 +853,9 @@ async def test_handle_options_click_delete_one_event_various_types(
 
 @pytest.mark.asyncio
 async def test_handle_options_click_delete_multiple_events_inline():
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_delete"
     
-    context_mock = MagicMock()
     # Кладем 2 события, чтобы сработал show_event_selection_list
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
@@ -923,10 +901,8 @@ async def test_handle_options_click_delete_multiple_events_inline():
 @pytest.mark.asyncio
 async def test_handle_options_click_delete_too_many_events_text_input():
     # ПОДГОТОВКА
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_delete"
-    
-    context_mock = MagicMock()
     
     # Генерируем 11 событий для срабатывания третьего сценария
     event_list = [
@@ -975,10 +951,9 @@ async def test_handle_options_click_delete_too_many_events_text_input():
 
 @pytest.mark.asyncio
 async def test_handle_options_click_invite_one_event():
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_invite"
     
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'event_text_record': [
@@ -1006,10 +981,9 @@ async def test_handle_options_click_invite_one_event():
 
 @pytest.mark.asyncio
 async def test_handle_options_click_invite_multiple_events_inline():
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_invite"
     
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'event_text_record': [
@@ -1044,10 +1018,9 @@ async def test_handle_options_click_invite_multiple_events_inline():
 
 @pytest.mark.asyncio
 async def test_handle_options_click_invite_too_many_events_text_input():
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_invite"
     
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'event_text_record': [
@@ -1091,12 +1064,11 @@ async def test_handle_edit_event_selection_success(
     mock_is_invitee.return_value = False
     mock_appointment.objects.filter.return_value.aexists = AsyncMock(return_value=False)
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем клик по второй кнопке (индекс 1)
     update_mock.callback_query.data = "edit_num:1"
     update_mock.effective_user.id = 12345
 
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20),
         'event_text_record': [
@@ -1138,10 +1110,9 @@ async def test_handle_edit_event_by_text_number_success(
     mock_is_invitee.return_value = False
     mock_appointment.objects.filter.return_value.aexists = AsyncMock(return_value=False)
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.effective_user.id = 12345
 
-    context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': date(2026, 10, 20)
     }
@@ -1167,12 +1138,12 @@ async def test_handle_delete_choice_specific_event(
 ):
     mock_confirm_to_delete.return_value = CONFIRMING_DELETE
 
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем клик по второй кнопке (индекс 1)
     update_mock.callback_query.data = "del_num:1"
 
     test_date = date(2026, 10, 20)
-    context_mock = MagicMock()
+
     event_records = [
         {
             'id': 777,
@@ -1218,59 +1189,73 @@ async def test_handle_delete_choice_specific_event(
     )
 
 
-# # --- ТЕСТ 2: Удаление через текстовый ввод номера ---
-# @pytest.mark.asyncio
-# @patch('app.handlers.calendar_act_with_options.confirm_to_delete')
-# @patch('app.handlers.calendar_act_with_options.get_validated_event_index')
-# @patch('app.handlers.calendar_act_with_options.format_event_time')
-# async def test_handle_delete_event_by_number_success(
-#     mock_format_time: MagicMock,
-#     mock_get_validated: AsyncMock,
-#     mock_confirm_to_delete: AsyncMock
-# ):
-#     mock_confirm_to_delete.return_value = CONFIRMING_DELETE
-#     mock_format_time.return_value = "10:00 - 11:00"
+# --- ТЕСТ 2: Удаление через текстовый ввод номера ---
+@pytest.mark.asyncio
+@patch('app.handlers.calendar_act_with_options.confirm_to_delete')
+@patch('app.handlers.calendar_act_with_options.get_validated_event_index')
+async def test_handle_delete_event_by_number_success(
+    mock_get_validated: AsyncMock,
+    mock_confirm_to_delete: AsyncMock
+):
+    mock_confirm_to_delete.return_value = CONFIRMING_DELETE
+    test_date = date(2026, 10, 20)
+
+    event_records = [
+        {
+            'id': 777,
+            'title': 'Ненужная встреча №1',
+            'event_type': 'interval',
+            'event_date': test_date,
+            'start_time': time(9, 0),
+            'end_time': time(10, 0),
+        },
+        {
+            'id': 778,
+            'title': 'Ненужная встреча №2',
+            'event_type': 'interval',
+            'event_date': test_date,
+            'start_time': time(9, 0),
+            'end_time': time(10, 0),
+        },
+    ]
     
-#     event_list = [
-#         {'id': 10, 'title': 'Событие 0', 'start_time': time(9, 0), 'end_time': time(10, 0)},
-#         {'id': 11, 'title': 'Событие 1', 'start_time': time(10, 0), 'end_time': time(11, 0)}
-#     ]
+    # Мокаем успешную валидацию (индекс 1)
+    mock_get_validated.return_value = (True, 1, event_records)
+
+    update_mock, context_mock = AsyncMock(), MagicMock()
     
-#     # Мокаем успешную валидацию (индекс 1)
-#     mock_get_validated.return_value = (True, 1, event_list)
+    context_mock.user_data = {
+        'selected_date': test_date
+    }
 
-#     update_mock = AsyncMock()
-#     test_date = date(2026, 10, 20)
-#     context_mock = MagicMock()
-#     context_mock.user_data = {
-#         'selected_date': test_date
-#     }
+    result: int = await handle_delete_event_by_number(update_mock, context_mock)
 
-#     result: int = await handle_delete_event_by_number(update_mock, context_mock)
+    assert result == CONFIRMING_DELETE
 
-#     assert result == CONFIRMING_DELETE
+    # Проверяем, что зафиксировались таргенты на событие с id=11
+    assert context_mock.user_data['delete_event_id'] == 778
+    assert context_mock.user_data['column_name'] == 'id'
 
-#     # Проверяем, что зафиксировались таргенты на событие с id=11
-#     assert context_mock.user_data['delete_event_id'] == 11
-#     assert context_mock.user_data['column_name'] == 'id'
+    expected_card = build_detailed_event_text(
+        event_records, index=1, numbered=True, is_show_date=True
+    )
+    expected_event = f"{expected_card}\n"
 
-#     mock_confirm_to_delete.assert_awaited_once_with(
-#         update_mock,
-#         "📌 *Событие*: \\[10:00 - 11:00] Событие 1\n",
-#         test_date,
-#         ("событие № 2?", "эту заметку.") 
-#     )
+    mock_confirm_to_delete.assert_awaited_once_with(
+        update_mock,
+        expected_event,
+        ("событие № 2?", "эту заметку.") 
+    )
 
 
 
 # --- ТЕСТ 1: Приглашение через инлайн-кнопку ---
 @pytest.mark.asyncio
 async def test_handle_invite_event_selection_success():
-    update_mock = AsyncMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем клик по второй кнопке (индекс 1)
     update_mock.callback_query.data = "invite_num:1"
 
-    context_mock = MagicMock()
     context_mock.user_data = {
         'event_text_record': [
             {'id': 100, 'title': 'Секретное собрание'},
@@ -1309,8 +1294,8 @@ async def test_handle_invite_event_by_text_number_success(mock_get_validated: As
     # Мокаем успешное прохождение валидатора: возвращаем индекс 1
     mock_get_validated.return_value = (True, 1, event_list)
 
-    update_mock = AsyncMock()
-    context_mock = MagicMock()
+    update_mock, context_mock = AsyncMock(), MagicMock()
+
     context_mock.user_data = {}
 
     result = await handle_invite_event_by_text_number(update_mock, context_mock)

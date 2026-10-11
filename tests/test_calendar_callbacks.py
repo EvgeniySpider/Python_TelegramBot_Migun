@@ -5,6 +5,7 @@ from datetime import date, time
 
 from telegram import InlineKeyboardMarkup
 
+from app.core.calendar.utils import build_detailed_event_text
 from app.handlers.calendar_act_with_options import handle_delete_event_by_number, handle_options_click
 from app.handlers.calendar_callbacks import handle_calendar_click
 from app.handlers.calendar_delete_event import handle_delete_choice
@@ -821,19 +822,30 @@ async def test_handle_options_click_delete_one_event_various_types(
     expected_first_sent: str
 ):
     # ПОДГОТОВКА
-    # Мокаем возвращаемый стейт из фабричного хэндлера
     mock_confirm_to_delete.return_value = CONFIRMING_DELETE
     
     update_mock = AsyncMock()
     update_mock.callback_query.data = "action_delete"
     
     test_date = date(2026, 10, 20)
+    start_time = time(10, 0) if event_type == 'interval' else None
+    end_time = time(11, 0) if event_type == 'interval' else None
+
+    event_record = [
+        {
+            'id': 777,
+            'title': 'Ненужная встреча',
+            'event_type': event_type,
+            'event_date': test_date,
+            'start_time': start_time,
+            'end_time': end_time,
+        }
+    ]
+
     context_mock = MagicMock()
     context_mock.user_data = {
         'selected_date': test_date,
-        'event_text_record': [
-            {'id': 777, 'title': 'Ненужная встреча', 'event_type': event_type}
-        ]
+        'event_text_record': event_record
     }
 
     # ВЫЗОВ
@@ -847,12 +859,15 @@ async def test_handle_options_click_delete_one_event_various_types(
     assert context_mock.user_data['delete_event_id'] == 777
     assert context_mock.user_data['column_name'] == 'id'
 
-    # 3. Проверяем вызов внешней функции confirm_to_delete с точными аргументами
-    # В зависимости от типа мероприятие текст меняется, проверяем это
+    # 3. Проверяем вызов внешней функции confirm_to_delete с точными аргументами (3 аргумента)
+    expected_card = build_detailed_event_text(
+        event_record, index=0, numbered=False, is_show_date=True
+    )
+    expected_event = f"{expected_card}\n"
+
     mock_confirm_to_delete.assert_awaited_once_with(
         update_mock.callback_query,
-        '📌 *Событие*: Ненужная встреча\n',
-        test_date,
+        expected_event,
         (expected_first_sent, 'заметку.')
     )
 

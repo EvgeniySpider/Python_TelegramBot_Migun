@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from app.handlers.commands import calendar_command
 from app.core.calendar.repositories import CalendarRepository
 from app.handlers.calendar_act_with_options import confirm_to_delete, handle_back_to_day_menu_click
-from app.core.calendar.utils import build_detailed_event_text, format_event_time, build_events_list_text
+from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.utils import notify_and_cancel_appointments
 
 

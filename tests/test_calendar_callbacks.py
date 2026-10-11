@@ -387,7 +387,9 @@ async def test_handle_time_input_exact_success(mock_has_conflict: AsyncMock):
     ("абвгд", False, "Неверный формат времени"),
     # 2. Несуществующее время (ValueError)
     ("25:00", False, "некорректное время суток"),
-    # 3. Конфликт в базе данных
+    # 3. Граничное время (схлопывание в нулевую длительность)
+    ("23:59", False, "время начала события не может быть позже 23:58"),
+    # 4. Конфликт в базе данных
     ("14:00", True, "это время занято"),
 ])
 @patch('app.handlers.calendar_set_event.CalendarRepository.has_time_conflict')

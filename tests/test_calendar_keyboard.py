@@ -339,12 +339,11 @@ async def test_handle_delete_all_events(mock_confirm_to_delete: AsyncMock):
     mock_confirm_to_delete.assert_awaited_once()
     args = mock_confirm_to_delete.call_args.args
     text_with_events = args[1]
-    selected_date = args[2]
-    delete_text: tuple = args[3]
+    delete_text: tuple = args[2]
 
     assert '07:00 - 08:00 Уборка' in text_with_events
     assert '08:00 - 08:30 Перекур' in text_with_events
-    assert date(2026, 10, 1) == selected_date
+
 
     assert '*АБСОЛЮТНО ВСЕ* мероприятия на этот день?' in delete_text[0]
     assert '**все существующие заметки** на эту дату! Восстановление будет невозможно' in delete_text[1]

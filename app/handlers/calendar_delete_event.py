@@ -72,10 +72,11 @@ async def del_event_on_info(
                            для фильтрации удаляемых строк.
         value (Any): Значение фильтра (конкретный целочисленный ID записи или объект datetime.date).
     """
+    user_id = update.effective_user.id
 
     async with context.application.database.connection() as conn:
         deleted_count: int = await CalendarRepository.delete_events_by_filter(
-            conn, column_name, value
+            conn, column_name, value, user_id
         )
     # Если что-то реально было удалено, увеличиваем счетчик на это количество
     if deleted_count > 0:

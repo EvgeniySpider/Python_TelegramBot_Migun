@@ -31,8 +31,8 @@ def test_create_event(auth_client: APIClient, test_user: User):
     assert created_event["title"] == payload["title"]
     assert created_event["description"] == payload["description"]
     assert created_event["event_date"] == payload["event_date"]
-    assert created_event['start_time'] == f"{payload['start_time']}:00"
-    assert created_event['end_time'] == f"{payload['end_time']}:00"
+    assert created_event["start_time"] == f"{payload['start_time']}:00"
+    assert created_event["end_time"] == f"{payload['end_time']}:00"
     assert created_event["is_public"] == payload["is_public"]
 
     db_event = Event.objects.get(id=created_event["id"])

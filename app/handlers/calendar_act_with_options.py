@@ -206,6 +206,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
     return CHOOSING_ACTION
 
+
 async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     await calendar_command(update, context)

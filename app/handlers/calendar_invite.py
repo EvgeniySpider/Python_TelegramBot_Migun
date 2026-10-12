@@ -153,14 +153,27 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         inviter_name = (
             update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
         )
+        date_str = (
+            target_event.event_date.strftime("%d.%m.%Y")
+            if hasattr(target_event.event_date, "strftime")
+            else str(target_event.event_date)
+        )
+
+        if target_event.start_time and target_event.end_time:
+            time_str = f"{target_event.start_time.strftime('%H:%M')} - {target_event.end_time.strftime('%H:%M')}"
+        else:
+            time_str = "Весь день"
+
         invite_text = (
             f"🔔 *Новое приглашение!*\n\n"
             f"*{inviter_name}* приглашает вас на событие:\n"
             f"📌 *{target_event.title}*\n"
-            f"📅 Дата: {target_event.event_date}\n"
+            f"📅 Дата: {date_str}\n"
+            f"⏰ Время: {time_str}\n"
         )
-        if target_event.start_time:
-            invite_text += f"⏰ Время: {target_event.start_time.strftime('%H:%M')}\n"
+
+        if target_event.description:
+            invite_text += f"📖 Описание: {target_event.description}\n"
 
         invite_text += "\nПримете приглашение?"
 

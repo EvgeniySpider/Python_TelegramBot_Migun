@@ -113,8 +113,8 @@ def generate_calendar_keyboard(
 def generate_time_options_keyboard(is_adding: bool = False) -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора формата времени для мероприятия."""
 
-    button_text = '🔙 Назад' if is_adding else '🔙 Изменить дату'
-    button_data = 'back_to_day_menu' if is_adding else 'action_back_to_calendar'
+    button_text = "🔙 Назад" if is_adding else "🔙 Изменить дату"
+    button_data = "back_to_day_menu" if is_adding else "action_back_to_calendar"
 
     keyboard = [
         [

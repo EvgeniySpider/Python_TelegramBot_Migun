@@ -73,6 +73,7 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     return CHOOSING_TIME
 
+
 async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     raw_time = update.message.text.strip().replace(" ", "")
     selected_date = context.user_data["selected_date"]

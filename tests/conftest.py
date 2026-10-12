@@ -1,7 +1,6 @@
 import pytest
 from datetime import date, time
 from rest_framework.test import APIClient
-from django.utils import timezone
 
 from events.models import Event, User
 

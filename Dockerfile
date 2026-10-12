@@ -22,8 +22,6 @@ FROM base AS development
 # Устанавливаем все зависимости, включая dev-группу
 RUN poetry install --no-root --no-interaction --no-ansi
 COPY --chown=appuser:appgroup . .
-# Даем права пользователю
-RUN chown -R appuser:appgroup /app
 USER appuser
 EXPOSE 8000
 # CMD в docker-compose

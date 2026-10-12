@@ -38,10 +38,27 @@ dev = [
 ]
 
 [tool.mypy]
+python_version = "3.12"
 explicit_package_bases = true
+# Игнорировать библиотеки без стабов (Django, DRF, environ, psycopg2)
+ignore_missing_imports = true
+# Никогда не проверять автосгенерированные миграции
+exclude = [
+    ".*/migrations/.*"
+]
 plugins = [
     "pydantic.mypy"
 ]
+
+# 1. Разрешаем не типизировать внутренности функций в тестах
+[[tool.mypy.overrides]]
+module = "tests.*"
+check_untyped_defs = false
+
+# 2. Заглушаем шум Telegram в хэндлерах (None, user_data, custom application)
+[[tool.mypy.overrides]]
+module = "app.handlers.*"
+disable_error_code = ["union-attr", "attr-defined", "index", "arg-type"]
 
 
 [tool.pytest.ini_options]

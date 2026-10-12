@@ -31,8 +31,8 @@ def test_create_event(auth_client: APIClient, test_user: User):
     assert created_event["title"] == payload["title"]
     assert created_event["description"] == payload["description"]
     assert created_event["event_date"] == payload["event_date"]
-    assert created_event["start_time"] == payload["start_time"] + ":00"
-    assert created_event["end_time"] == payload["end_time"] + ":00"
+    assert created_event['start_time'] == f"{payload['start_time']}:00"
+    assert created_event['end_time'] == f"{payload['end_time']}:00"
     assert created_event["is_public"] == payload["is_public"]
 
     db_event = Event.objects.get(id=created_event["id"])
@@ -210,15 +210,15 @@ def test_create_event_time_collisions(auth_client: APIClient, test_user: User):
 
     # Сценарий Б: Точное время (exact) падает прямо внутрь занятого интервала (в 13:00)
     payload = {**base_payload, "event_type": "exact", "start_time": "13:00"}
-    response: Response = auth_client.post(url, data=payload, format="json")
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "non_field_errors" in response.json()
+    response_exact: Response = auth_client.post(url, data=payload, format="json")
+    assert response_exact.status_code == status.HTTP_400_BAD_REQUEST
+    assert "non_field_errors" in response_exact.json()
 
     # Сценарий В: Попытка объявить весь день (all_day) занятым, хотя внутри уже есть интервал
     payload = {**base_payload, "event_type": "all_day"}
-    response: Response = auth_client.post(url, data=payload, format="json")
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert "non_field_errors" in response.json()
+    response_allday: Response = auth_client.post(url, data=payload, format="json")
+    assert response_allday.status_code == status.HTTP_400_BAD_REQUEST
+    assert "non_field_errors" in response_allday.json()
 
 
 @pytest.mark.django_db

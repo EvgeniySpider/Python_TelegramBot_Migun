@@ -21,7 +21,7 @@ RU_MONTHS = {
 def generate_calendar_keyboard(
     year: int,
     month: int,
-    busy_days: set[int] = None,
+    busy_days: dict[int, str] | None = None,
     editing_day: int = None,
     is_back_button: bool = False,
 ) -> InlineKeyboardMarkup:
@@ -110,14 +110,11 @@ def generate_calendar_keyboard(
     return InlineKeyboardMarkup(keyboard)
 
 
-def generate_time_options_keyboard(is_adding=False) -> InlineKeyboardMarkup:
+def generate_time_options_keyboard(is_adding: bool = False) -> InlineKeyboardMarkup:
     """Генерирует клавиатуру выбора формата времени для мероприятия."""
 
-    args_button = (
-        {"text": "🔙 Назад", "callback_data": "back_to_day_menu"}
-        if is_adding
-        else {"text": "🔙 Изменить дату", "callback_data": "action_back_to_calendar"}
-    )
+    button_text = '🔙 Назад' if is_adding else '🔙 Изменить дату'
+    button_data = 'back_to_day_menu' if is_adding else 'action_back_to_calendar'
 
     keyboard = [
         [
@@ -126,7 +123,7 @@ def generate_time_options_keyboard(is_adding=False) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⏳ Интервал", callback_data="event_time:interval"),
         ],
         # РЯД 2: Кнопка возврата к сетке календаря
-        [InlineKeyboardButton(**args_button)],
+        [InlineKeyboardButton(text=button_text, callback_data=button_data)],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -167,10 +164,10 @@ def generate_confirm_keyboard() -> InlineKeyboardMarkup:
 
 
 def generate_numbered_action_keyboard(
-    count: int = None, prefix: str = "edit_num"
+    count: int | None = None, prefix: str = "edit_num"
 ) -> InlineKeyboardMarkup:
     """Генерирует клавиатуру с номерами задач для РЕДАКТИРОВАНИЯ, УДАЛЕНИЯ или ПРИГЛАШЕНИЯ."""
-    keyboard = [[], []]
+    keyboard: list[list[InlineKeyboardButton]] = [[], []]
 
     # 1. Наполняем цифрами 1, 2, 3...
     if count is not None:

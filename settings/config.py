@@ -33,4 +33,4 @@ class AppSettings(BaseSettings):
             port=self.db_port,
             path=self.db_name,
         )
-        return Secret(built_url)
+        return Secret(PostgresDsn(str(built_url)))

@@ -139,6 +139,6 @@ def test_double_delete_event(auth_client: APIClient, private_event: Event):
     assert response.status_code == status.HTTP_204_NO_CONTENT
     assert not Event.objects.filter(id=private_event.id).exists()
 
-    response: Response = auth_client.delete(url)
+    response_second: Response = auth_client.delete(url)
 
-    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response_second.status_code == status.HTTP_404_NOT_FOUND

@@ -1,5 +1,6 @@
 import os
-from pydantic import Field, PostgresDsn, SecretStr, Secret
+
+from pydantic import Field, PostgresDsn, Secret, SecretStr
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -7,9 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), "..", ".env"),
-        
         env_file_encoding="utf-8",
-        extra="ignore"  # Игнор лишних переменных в .env, если они там появятся
+        extra="ignore",  # Игнор лишних переменных в .env, если они там появятся
     )
 
     telegram_api_key: SecretStr = Field(alias="TELEGRAM_API_KEY")

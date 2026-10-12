@@ -1,5 +1,6 @@
-import asyncpg
 import datetime
+
+import asyncpg
 
 
 class CalendarRepository:
@@ -7,10 +8,7 @@ class CalendarRepository:
 
     @staticmethod
     async def get_busy_days(
-        conn: asyncpg.Connection,
-        user_id: int,
-        year: int,
-        month: int
+        conn: asyncpg.Connection, user_id: int, year: int, month: int
     ) -> list[asyncpg.Record]:
         """
         Вытаскивает из БД список дней месяца с их статусом занятости ('full' или 'partial').
@@ -35,9 +33,7 @@ class CalendarRepository:
 
     @staticmethod
     async def get_events_by_date(
-        conn: asyncpg.Connection,
-        user_id: int,
-        event_date: datetime.date
+        conn: asyncpg.Connection, user_id: int, event_date: datetime.date
     ) -> list[asyncpg.Record]:
         """
         Вытаскивает все события пользователя на конкретную дату.
@@ -59,7 +55,7 @@ class CalendarRepository:
         event_date: datetime.date,
         start_time: datetime.time,
         end_time: datetime.time,
-        exclude_event_id: int | None = None
+        exclude_event_id: int | None = None,
     ) -> bool:
         """
         Проверяет наличие конфликтов (пересечений) времени для событий.
@@ -83,25 +79,26 @@ class CalendarRepository:
                 AND $4::TIME > start_time
             );
         """
-        return await conn.fetchval(query, user_id, event_date, start_time, end_time, exclude_event_id)
+        return await conn.fetchval(
+            query, user_id, event_date, start_time, end_time, exclude_event_id
+        )
 
     @staticmethod
     async def delete_events_by_filter(
         conn: asyncpg.Connection,
         column_name: str,  # Сюда передаем строго строку "id" или "event_date"
         # Сюда передаем конкретный int (ID) или datetime.date
-        value: int | datetime.datetime
+        value: int | datetime.datetime,
     ):
         # Валидация для защиты от SQL-инъекций (перфекционизм и безопасность!)
-        if column_name not in ('id', 'event_date'):
-            raise ValueError(
-                f"Недопустимое имя столбца для удаления: {column_name}")
+        if column_name not in ("id", "event_date"):
+            raise ValueError(f"Недопустимое имя столбца для удаления: {column_name}")
 
         # Формируем строку запроса динамически, подставляя имя столбца безопасным путем
-        query = f'''
+        query = f"""
             DELETE FROM events
             WHERE {column_name} = $1;
-        '''
+        """
         result = await conn.execute(query, value)
 
         # Извлечение числа с помощью split

@@ -1,5 +1,6 @@
-import pytest
 from datetime import date, time
+
+import pytest
 from rest_framework.test import APIClient
 
 from events.models import Event, User
@@ -26,10 +27,10 @@ def public_event(test_user: User) -> Event:
     """Создает публичное событие напрямую в БД."""
     return Event.objects.create(
         user=test_user,
-        event_type='all_day',
-        title='Тестовое публичное событие',
+        event_type="all_day",
+        title="Тестовое публичное событие",
         event_date=date.today(),
-        is_public=True
+        is_public=True,
     )
 
 
@@ -38,12 +39,12 @@ def private_event(test_user: User) -> Event:
     """Создает приватное событие для проверки фильтрации."""
     return Event.objects.create(
         user=test_user,
-        event_type='exact',
-        title='Секретное событие',
+        event_type="exact",
+        title="Секретное событие",
         event_date=date.today(),
         start_time=time(10, 0),
         end_time=time(10, 30),
-        is_public=False
+        is_public=False,
     )
 
 
@@ -65,8 +66,8 @@ def alien_event(alien_user: User) -> Event:
     """Создает публичное событие, принадлежащее чужому пользователю."""
     return Event.objects.create(
         user=alien_user,
-        event_type='all_day',
-        title='Событие другого пользователя',
+        event_type="all_day",
+        title="Событие другого пользователя",
         event_date=date.today(),
-        is_public=True
+        is_public=True,
     )

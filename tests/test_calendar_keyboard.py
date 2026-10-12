@@ -7,18 +7,18 @@ def test_generate_calendar_keyboard_complex_state():
     markup = generate_calendar_keyboard(
         year=2026,
         month=10,
-        busy_days={5: 'full', 10: 'partial'},
+        busy_days={5: "full", 10: "partial"},
         editing_day=15,
-        is_back_button=True
+        is_back_button=True,
     )
-    
+
     # Извлекаем саму матрицу кнопок из объекта разметки
     keyboard = markup.inline_keyboard
 
     # 1. Проверка заголовка (первый ряд, первая кнопка)
     assert keyboard[0][0].text == "Октябрь 2026"
     assert keyboard[0][0].callback_data == "calendar_ignore"
-    
+
     # 2. Собираем тексты всех кнопок в плоский список для удобного поиска
     buttons_text = [button.text for row in keyboard for button in row]
 
@@ -42,9 +42,3 @@ def test_generate_calendar_keyboard_complex_state():
     # Проверка математики следующего месяца
     assert nav_row[-1].text == "След »"
     assert nav_row[-1].callback_data == "calendar_nav:2026:11"
-
-
-
-
-
-

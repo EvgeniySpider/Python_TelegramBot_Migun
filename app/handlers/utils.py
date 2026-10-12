@@ -1,20 +1,18 @@
+import datetime
 import logging
+from typing import Any
 
 from telegram import Update
-from telegram.ext import ContextTypes, ExtBot
-import datetime
-from typing import Optional
-from typing import Any
 from telegram.error import TelegramError
+from telegram.ext import ContextTypes, ExtBot
 
 from events.models import Appointment, Event
 
 logger = logging.getLogger(__name__)
 
+
 async def get_validated_event_index(
-    update: Update, 
-    context: ContextTypes.DEFAULT_TYPE, 
-    error_state: int
+    update: Update, context: ContextTypes.DEFAULT_TYPE, error_state: int
 ) -> tuple[bool, int, list]:
     """
     Извлекает данные из контекста, валидирует ввод номера события и вычисляет индекс.
@@ -22,7 +20,7 @@ async def get_validated_event_index(
     - Если False: result = error_state (STATE для возврата).
     - Если True: result = index_record (индекс для списка), event_text_record = сам список.
     """
-    event_text_record = context.user_data.get('event_text_record', [])
+    event_text_record = context.user_data.get("event_text_record", [])
     event_count = len(event_text_record)
     user_text = update.message.text.strip()
 
@@ -30,7 +28,7 @@ async def get_validated_event_index(
         await update.message.reply_text(
             f"❌ Ошибка: введите только *число* (цифру).\n"
             f"Попробуйте еще раз (от 1 до {event_count}):",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return False, error_state, []
 
@@ -48,8 +46,8 @@ async def get_validated_event_index(
 async def is_user_invitee_for_event(
     user_id: int,
     selected_date: datetime.date,
-    start_time: Optional[datetime.time],
-    end_time: Optional[datetime.time]
+    start_time: datetime.time | None,
+    end_time: datetime.time | None,
 ) -> bool:
     """
     Проверяет, является ли пользователь приглашенным на мероприятие (ребенком),
@@ -60,54 +58,55 @@ async def is_user_invitee_for_event(
         invitee_id=user_id,
         event__event_date=selected_date,
         event__start_time=start_time,
-        event__end_time=end_time
+        event__end_time=end_time,
     ).aexists()
 
 
 async def notify_and_cancel_appointments(
-    user_id: int,
-    column_name: str,
-    value: Any,
-    bot: ExtBot
+    user_id: int, column_name: str, value: Any, bot: ExtBot
 ) -> None:
     """
     Ищет удаляемые события пользователя и обрабатывает связанные встречи:
     - Если юзер организатор -> удаляет приглашения и копии у детей, уведомляет детей.
     - Если юзер ребенок -> удаляет свое приглашение, уведомляет организатора.
     """
-    if column_name == 'id':
+    if column_name == "id":
         events_to_delete = Event.objects.filter(id=value, user_id=user_id)
-    elif column_name == 'event_date':
+    elif column_name == "event_date":
         events_to_delete = Event.objects.filter(event_date=value, user_id=user_id)
     else:
         return
-    
+
     async for local_event in events_to_delete:
         date_str = local_event.event_date.strftime("%d.%m.%Y")
-        time_str = f"{local_event.start_time.strftime('%H:%M')} - {local_event.end_time.strftime('%H:%M')}" if local_event.start_time else "Весь день"
+        time_str = (
+            f"{local_event.start_time.strftime('%H:%M')} - {local_event.end_time.strftime('%H:%M')}"
+            if local_event.start_time
+            else "Весь день"
+        )
 
         # ==========================================
         # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
         # ==========================================
         # Ищем все встречи, привязанные к этому конкретному событию
         hosted_appointments = Appointment.objects.filter(event_id=local_event.id)
-        
+
         # Если такие есть, значит мы удаляем оригинал
         async for appt in hosted_appointments:
             invitee_id = appt.invitee_id
-            
+
             # Находим и удаляем локальную копию в календаре ребенка.
             # aexists/afirst не нужны, метод adelete() на QuerySet удалит всё сам одним SQL-запросом
             await Event.objects.filter(
                 user_id=invitee_id,
                 event_date=local_event.event_date,
                 start_time=local_event.start_time,
-                end_time=local_event.end_time
+                end_time=local_event.end_time,
             ).adelete()
-            
+
             # Удаляем саму запись о встрече
             await appt.adelete()
-            
+
             msg = (
                 f"❌ *Отмена встречи*\n\n"
                 f"Организатор (ID: `{user_id}`) отменил мероприятие:\n"
@@ -123,12 +122,16 @@ async def notify_and_cancel_appointments(
         # ==========================================
         # СЦЕНАРИЙ Б: Пользователь — РЕБЕНОК (приглашенный)
         # ==========================================
-        appt_as_invitee = await Appointment.objects.select_related('event').filter(
-            invitee_id=user_id,
-            event__event_date=local_event.event_date,
-            event__start_time=local_event.start_time,
-            event__end_time=local_event.end_time
-        ).afirst()
+        appt_as_invitee = (
+            await Appointment.objects.select_related("event")
+            .filter(
+                invitee_id=user_id,
+                event__event_date=local_event.event_date,
+                event__start_time=local_event.start_time,
+                event__end_time=local_event.end_time,
+            )
+            .afirst()
+        )
 
         if appt_as_invitee and appt_as_invitee.status != Appointment.Status.CANCELLED:
             organizer_id = appt_as_invitee.event.user_id
@@ -146,7 +149,9 @@ async def notify_and_cancel_appointments(
                 logger.warning(f"Ошибка отправки уведомления организатору {organizer_id}: {e}")
 
 
-def validate_telegram_id_input(input_text: str, current_user_id: int, self_error_msg: str) -> tuple[bool, int | str]:
+def validate_telegram_id_input(
+    input_text: str, current_user_id: int, self_error_msg: str
+) -> tuple[bool, int | str]:
     """
     Проверяет введенный текст на соответствие формату Telegram ID и предотвращает ввод собственного ID.
     Возвращает (True, telegram_id) при успехе, либо (False, текст_ошибки) при неудаче.

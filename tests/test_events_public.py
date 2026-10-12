@@ -1,27 +1,25 @@
 import pytest
 from django.urls import reverse
-from rest_framework.test import APIClient
-from rest_framework.response import Response
-from events.models import Event, User
 from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.test import APIClient
+
+from events.models import Event, User
 
 
 @pytest.mark.django_db
 def test_get_public_events_list(
-    api_client: APIClient, 
-    public_event: Event, 
-    private_event: Event,
-    test_user: User
+    api_client: APIClient, public_event: Event, private_event: Event, test_user: User
 ):
-    url: str = reverse('api:public-events-list')
+    url: str = reverse("api:public-events-list")
     response: Response = api_client.get(url)
-    
+
     assert response.status_code == status.HTTP_200_OK
-    
+
     data: list[dict] = response.json()
     assert len(data) == 1
-    assert data[0]['title'] == 'Тестовое публичное событие'
-    assert data[0]['is_public'] is True
+    assert data[0]["title"] == "Тестовое публичное событие"
+    assert data[0]["is_public"] is True
 
 
 @pytest.mark.django_db
@@ -30,10 +28,10 @@ def test_get_public_user_event_list(
     test_user: User,
     public_event: Event,
     private_event: Event,
-    alien_event: Event
+    alien_event: Event,
 ):
 
-    url: str = reverse('api:user-public-events-list', kwargs={'telegram_id': test_user.telegram_id})
+    url: str = reverse("api:user-public-events-list", kwargs={"telegram_id": test_user.telegram_id})
     response: Response = api_client.get(url)
 
     assert response.status_code == status.HTTP_200_OK
@@ -41,6 +39,6 @@ def test_get_public_user_event_list(
     data: list[dict] = response.json()
 
     assert len(data) == 1
-    assert data[0]['title'] == 'Тестовое публичное событие'
-    assert data[0]['is_public'] is True
-    assert data[0]['user'] == test_user.telegram_id
+    assert data[0]["title"] == "Тестовое публичное событие"
+    assert data[0]["is_public"] is True
+    assert data[0]["user"] == test_user.telegram_id

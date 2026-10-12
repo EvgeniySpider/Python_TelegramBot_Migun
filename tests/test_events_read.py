@@ -1,9 +1,10 @@
 import pytest
 from django.urls import reverse
-from rest_framework.test import APIClient
-from rest_framework.response import Response
-from events.models import Event, User
 from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.test import APIClient
+
+from events.models import Event, User
 
 
 @pytest.mark.django_db
@@ -12,10 +13,10 @@ def test_get_user_event_list(
     test_user: User,
     public_event: Event,
     private_event: Event,
-    alien_event: Event
+    alien_event: Event,
 ):
-    
-    url: str = reverse('api:private-events-list')
+
+    url: str = reverse("api:private-events-list")
     response: Response = auth_client.get(url)
 
     # 1. Сначала статус
@@ -26,5 +27,5 @@ def test_get_user_event_list(
     assert len(data) == 2
 
     # 3. Безопасная проверка без жесткой привязки к порядку
-    assert {item['is_public'] for item in data} == {True, False}
-    assert all(item['user'] == test_user.telegram_id for item in data)
+    assert {item["is_public"] for item in data} == {True, False}
+    assert all(item["user"] == test_user.telegram_id for item in data)

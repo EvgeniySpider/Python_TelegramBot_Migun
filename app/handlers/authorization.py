@@ -1,4 +1,5 @@
 from datetime import timedelta
+
 from django.utils import timezone
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -8,12 +9,12 @@ from events.models import User
 
 async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Выдает пользователю API-токен. 
+    Выдает пользователю API-токен.
     Если токен существует и не истек — показывает его.
     Если истек или отсутствует — генерирует новый.
     """
     telegram_id = update.effective_user.id
-    
+
     try:
         user = await User.objects.aget(telegram_id=telegram_id)
     except User.DoesNotExist:
@@ -22,6 +23,7 @@ async def api_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # Получаем время жизни токена из настроек
     from app.main import settings
+
     lifetime_minutes: int = settings.api_token_lifetime_minutes
     now = timezone.now()
 

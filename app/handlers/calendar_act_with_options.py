@@ -1,38 +1,45 @@
-from telegram import Update, CallbackQuery
+from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes, ConversationHandler
-from typing import Union
 
-from app.handlers.calendar_callbacks import handle_time_selection_option, handle_options_with_exist_notes_in_day
-from app.handlers.commands import calendar_command
-from app.handlers.states import (
-    CHOOSING_ACTION,
-    CHOOSING_EVENT_TO_DELETE,
-    CONFIRMING_DELETE,
-    SELECTING_INVITE_EVENT,
-    TYPING_EVENT_NUMBER_TO_DELETE,
-    CHOOSING_EDIT_FIELD,
-    SELECTING_EDIT_EVENT,
-    TYPING_EDIT_NUM,
-    TYPING_INVITE_NUM,
-    TYPING_INVITEE_ID
+from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
+from app.handlers.calendar_callbacks import (
+    handle_options_with_exist_notes_in_day,
+    handle_time_selection_option,
 )
 from app.handlers.calendar_keyboard import (
     generate_back_to_menu_button,
     generate_confirm_keyboard,
+    generate_edit_fields_keyboard,
     generate_numbered_action_keyboard,
-    generate_edit_fields_keyboard
 )
-from app.core.calendar.utils import build_events_list_text, build_detailed_event_text
+from app.handlers.commands import calendar_command
+from app.handlers.states import (
+    CHOOSING_ACTION,
+    CHOOSING_EDIT_FIELD,
+    CHOOSING_EVENT_TO_DELETE,
+    CONFIRMING_DELETE,
+    SELECTING_EDIT_EVENT,
+    SELECTING_INVITE_EVENT,
+    TYPING_EDIT_NUM,
+    TYPING_EVENT_NUMBER_TO_DELETE,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID,
+)
 from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
 from events.models import Appointment
 
 
-async def show_event_selection_list(query: CallbackQuery, event_text_record: list, action: str) -> int:
+async def show_event_selection_list(
+    query: CallbackQuery, event_text_record: list, action: str
+) -> int:
     """Отрисовывает список событий (от 2 шт.) для выбора и возвращает нужный стейт."""
     event_count = len(event_text_record)
-    
+
     # Генерация карточек происходит один раз
-    cards = [build_detailed_event_text(event_text_record, index=i, numbered=True) for i in range(event_count)]
+    cards = [
+        build_detailed_event_text(event_text_record, index=i, numbered=True)
+        for i in range(event_count)
+    ]
 
     # Настраиваем тексты и стейты в зависимости от действия
     if action == "edit":
@@ -41,7 +48,7 @@ async def show_event_selection_list(query: CallbackQuery, event_text_record: lis
         prompt_text_input = "Отправьте номер события в чат, чтобы его изменить:\n\n"
         state_inline = SELECTING_EDIT_EVENT
         state_text = TYPING_EDIT_NUM
-        
+
     elif action == "delete":
         prefix = "del_num"
         prompt_inline = "Выберите номер события для удаления:\n\n"
@@ -49,7 +56,7 @@ async def show_event_selection_list(query: CallbackQuery, event_text_record: lis
         state_inline = CHOOSING_EVENT_TO_DELETE
         state_text = TYPING_EVENT_NUMBER_TO_DELETE
 
-    elif action == 'invite':
+    elif action == "invite":
         prefix = "invite_num"
         prompt_inline = "Выберите номер события для назначения встречи:\n\n"
         prompt_text_input = "Отправьте номер события в чат, чтобы назначить на него встречу:\n\n"
@@ -62,20 +69,19 @@ async def show_event_selection_list(query: CallbackQuery, event_text_record: lis
         await query.edit_message_text(
             text=full_text,
             reply_markup=generate_numbered_action_keyboard(event_count, prefix=prefix),
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return state_inline
 
     # СЦЕНАРИЙ 3: Ввод текста (больше 10)
     else:
         full_text = (
-            "⚠️ Событий слишком много для отображения кнопок-номеров.\n\n"
-            f"{prompt_text_input}"
+            f"⚠️ Событий слишком много для отображения кнопок-номеров.\n\n{prompt_text_input}"
         ) + "\n".join(cards)
         await query.edit_message_text(
             text=full_text,
             reply_markup=generate_numbered_action_keyboard(count=None, prefix=prefix),
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return state_text
 
@@ -83,66 +89,68 @@ async def show_event_selection_list(query: CallbackQuery, event_text_record: lis
 async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
 
-    selected_date = context.user_data.get('selected_date')
-    event_text_record = context.user_data.get('event_text_record', [])
+    selected_date = context.user_data.get("selected_date")
+    event_text_record = context.user_data.get("event_text_record", [])
     event_count = len(event_text_record)
 
     # Проверяем, какая именно кнопка была нажата
     if query.data == "action_create":
-        month_busy_days = context.user_data.get('month_busy_days', {})
+        month_busy_days = context.user_data.get("month_busy_days", {})
 
-        if month_busy_days.get(selected_date.day) == 'full':
+        if month_busy_days.get(selected_date.day) == "full":
             await query.answer(
-                text=f'❌ Ошибка: этот день полностью занят.\n'
-                f'Выберите другую дату\n',
-                show_alert=False
+                text="❌ Ошибка: этот день полностью занят.\nВыберите другую дату\n",
+                show_alert=False,
             )
             return CHOOSING_ACTION
 
-        args = (query, selected_date.day,
-                selected_date.month, selected_date.year)
+        args = (query, selected_date.day, selected_date.month, selected_date.year)
 
         # Генерируем обычный текст списка задач "на лету" без засорения context.user_data
-        current_events_text = build_events_list_text(
-            event_text_record, numbered=False)
+        current_events_text = build_events_list_text(event_text_record, numbered=False)
         state = await handle_time_selection_option(args, current_events_text, is_adding=True)
         return state
 
     elif query.data == "action_edit":
         if event_count == 1:
             event_rec = event_text_record[0]
-            selected_date = context.user_data.get('selected_date')
+            selected_date = context.user_data.get("selected_date")
             user_id = update.effective_user.id
 
             is_invitee = await is_user_invitee_for_event(
                 user_id=user_id,
                 selected_date=selected_date,
-                start_time=event_rec['start_time'],
-                end_time=event_rec['end_time']
+                start_time=event_rec["start_time"],
+                end_time=event_rec["end_time"],
             )
 
             if is_invitee:
                 await query.answer(
-                    "❌ Нельзя редактировать встречу на которую вас пригласили. Вы можете только удалить её (отменить участие).", 
-                    show_alert=False
+                    "❌ Нельзя редактировать встречу на которую вас пригласили. Вы можете только удалить её (отменить участие).",
+                    show_alert=False,
                 )
                 return CHOOSING_ACTION
 
-            if await Appointment.objects.filter(event = event_rec['id']).aexists():
-                await query.answer('❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать')
+            if await Appointment.objects.filter(event=event_rec["id"]).aexists():
+                await query.answer(
+                    "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
+                )
                 return CHOOSING_ACTION
 
-            detailed_event_text = build_detailed_event_text(event_text_record, index=0, numbered=False)
-            
-            context.user_data['current_event_time'] = (event_rec['start_time'], event_rec['end_time'])
-            context.user_data['edit_event_id'] = event_rec['id']
-            context.user_data['edit_event_index'] = 0
+            detailed_event_text = build_detailed_event_text(
+                event_text_record, index=0, numbered=False
+            )
+
+            context.user_data["current_event_time"] = (
+                event_rec["start_time"],
+                event_rec["end_time"],
+            )
+            context.user_data["edit_event_id"] = event_rec["id"]
+            context.user_data["edit_event_index"] = 0
 
             text = f"У вас 1 заметка. Выберите опцию, чтобы отредактировать её\n\n{detailed_event_text}"
             await query.edit_message_text(
-                text=text,
-                reply_markup=generate_edit_fields_keyboard(),
-                parse_mode="Markdown"
+                text=text, reply_markup=generate_edit_fields_keyboard(), parse_mode="Markdown"
             )
             return CHOOSING_EDIT_FIELD
 
@@ -152,20 +160,18 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----
         if event_count == 1:
             # Фиксируем в ОЗУ ID события, на которое будем приглашать
-            context.user_data['invite_event_id'] = event_text_record[0]['id']
-            
+            context.user_data["invite_event_id"] = event_text_record[0]["id"]
+
             # Вытаскиваем название для красивого отображения
-            event_title = event_text_record[0]['title']
+            event_title = event_text_record[0]["title"]
 
             text = (
                 f"Выбрано событие: **{event_title}**\n\n"
                 "Пожалуйста, **отправьте Telegram ID** пользователя, которого хотите пригласить:"
             )
-            
+
             await query.edit_message_text(
-                text=text,
-                reply_markup=generate_back_to_menu_button(),
-                parse_mode="Markdown"
+                text=text, reply_markup=generate_back_to_menu_button(), parse_mode="Markdown"
             )
             return TYPING_INVITEE_ID
 
@@ -176,12 +182,16 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # Уникальная логика, если заметка всего одна
         if event_count == 1:
             event_rec = event_text_record[0]
-            context.user_data['delete_event_id'] = event_rec['id']
-            context.user_data['column_name'] = 'id'
+            context.user_data["delete_event_id"] = event_rec["id"]
+            context.user_data["column_name"] = "id"
 
-            first_sent = 'мероприятие на весь день?' if event_rec['event_type'] == 'all_day' else 'мероприятие?'
-            delete_text = first_sent, 'заметку.'
-            
+            first_sent = (
+                "мероприятие на весь день?"
+                if event_rec["event_type"] == "all_day"
+                else "мероприятие?"
+            )
+            delete_text = first_sent, "заметку."
+
             # ИЗМЕНЕНИЕ: Используем красивую карточку
             detailed_event_text = build_detailed_event_text(
                 event_text_record, index=0, numbered=False, is_show_date=True
@@ -201,11 +211,7 @@ async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DE
     return ConversationHandler.END
 
 
-async def confirm_to_delete(
-    source: Union[CallbackQuery, Update],
-    event: str,
-    delete_text: tuple
-) -> int:
+async def confirm_to_delete(source: CallbackQuery | Update, event: str, delete_text: tuple) -> int:
     """
     Универсальный фабричный хэндлер для рендеринга и отправки окна подтверждения удаления.
     Динамически адаптируется под тип входящего события (клик по кнопке или текстовое сообщение).
@@ -220,7 +226,7 @@ async def confirm_to_delete(
         source (Union[CallbackQuery, Update]): Источник вызова.
         event (str): Сформированное строковое превью удаляемого события (или пачки событий).
         selected_date (datetime.date): Целевая дата проведения мероприятия.
-        delete_text (tuple): Двухэлементный кортеж строк для динамической подстановки склонений 
+        delete_text (tuple): Двухэлементный кортеж строк для динамической подстановки склонений
                              (например: ("событие №1?", "эту заметку.")).
 
     Returns:
@@ -236,7 +242,7 @@ async def confirm_to_delete(
     kwargs = {
         "text": text_to_send,
         "reply_markup": generate_confirm_keyboard(),
-        "parse_mode": "Markdown"
+        "parse_mode": "Markdown",
     }
 
     if hasattr(source, "edit_message_text"):
@@ -272,12 +278,12 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
     )
     if not is_valid:
         return result
-    
+
     index_record = result
     event_rec = event_text_record[index_record]
 
-    context.user_data['delete_event_id'] = event_rec['id']
-    context.user_data['column_name'] = 'id'
+    context.user_data["delete_event_id"] = event_rec["id"]
+    context.user_data["column_name"] = "id"
 
     delete_text = f"событие № {index_record + 1}?", "эту заметку."
 
@@ -292,14 +298,18 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
 
 
 async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    event_text_record = context.user_data['event_text_record']
+    event_text_record = context.user_data["event_text_record"]
     event_count = len(event_text_record)
-    cards = [build_detailed_event_text(
-            event_text_record, index=i, numbered=True) for i in range(event_count)]
-    events_text = "\n".join(cards) + '\n'
+    cards = [
+        build_detailed_event_text(event_text_record, index=i, numbered=True)
+        for i in range(event_count)
+    ]
+    events_text = "\n".join(cards) + "\n"
 
     source = update.callback_query if update.callback_query else update
-    date = context.user_data['selected_date']
-    header = context.user_data.get('edit_success_status', '')
+    date = context.user_data["selected_date"]
+    header = context.user_data.get("edit_success_status", "")
 
-    return await handle_options_with_exist_notes_in_day(events_text,(source, date.day, date.month, date.year), header=header)
+    return await handle_options_with_exist_notes_in_day(
+        events_text, (source, date.day, date.month, date.year), header=header
+    )

@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Event, User, BotStatistics, Appointment
+
+from .models import Appointment, BotStatistics, Event, User
 
 
 @admin.register(User)

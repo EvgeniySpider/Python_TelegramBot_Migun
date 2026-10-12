@@ -1,26 +1,32 @@
 import logging
-from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
-from telegram.error import TelegramError
-from django.db.models import Q
 
-from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_back_to_menu_button
+from django.db.models import Q
+from telegram import Update
+from telegram.error import TelegramError
+from telegram.ext import ContextTypes, ConversationHandler
+
+from app.core.calendar.services import check_user_availability
+from app.core.calendar.utils import build_detailed_event_text
+from app.handlers.calendar_keyboard import (
+    generate_back_calendar_button,
+    generate_back_to_menu_button,
+    generate_confirm_invite_keyboard,
+)
 from app.handlers.commands import calendar_command
 from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
 from app.handlers.utils import get_validated_event_index, validate_telegram_id_input
-from events.models import User, Event, Appointment
-from app.core.calendar.services import check_user_availability
-from app.handlers.calendar_keyboard import generate_confirm_invite_keyboard
-from app.core.calendar.utils import build_detailed_event_text
+from events.models import Appointment, Event, User
 
 logger = logging.getLogger(__name__)
 
 
-async def handle_invite_event_by_text_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_invite_event_by_text_number(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     """
     Обрабатывает выбор события для приглашения через текстовый ввод номера (когда задач > 10).
     Делегирует проверку ввода и вычисление машинного индекса функции get_validated_event_index.
-    При успешной валидации сохраняет ID выбранного события в ОЗУ (invite_event_id) 
+    При успешной валидации сохраняет ID выбранного события в ОЗУ (invite_event_id)
     и переводит диалог в режим ожидания ввода Telegram ID гостя.
 
     Возвращает стейт TYPING_INVITEE_ID при успехе, либо стейт повторного ввода при ошибке.
@@ -29,13 +35,13 @@ async def handle_invite_event_by_text_number(update: Update, context: ContextTyp
     is_valid, result, event_text_record = await get_validated_event_index(
         update, context, TYPING_INVITE_NUM
     )
-    
+
     if not is_valid:
         return result
     index_record = result
 
-    context.user_data['invite_event_id'] = event_text_record[index_record]['id']
-    event_title = event_text_record[index_record]['title']
+    context.user_data["invite_event_id"] = event_text_record[index_record]["id"]
+    event_title = event_text_record[index_record]["title"]
 
     text = (
         f"Выбрано событие: *{event_title}*\n\n"
@@ -43,9 +49,7 @@ async def handle_invite_event_by_text_number(update: Update, context: ContextTyp
     )
 
     await update.message.reply_text(
-        text=text,
-        reply_markup=generate_back_to_menu_button(),
-        parse_mode="Markdown"
+        text=text, reply_markup=generate_back_to_menu_button(), parse_mode="Markdown"
     )
     return TYPING_INVITEE_ID
 
@@ -55,19 +59,19 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
     Обрабатывает выбор события для приглашения через инлайн-кнопку (когда задач <= 10).
     Извлекает индекс из callback_data, фиксирует целевой ID события в ОЗУ (invite_event_id)
     и переводит диалог в режим ожидания ввода Telegram ID гостя.
-    
+
     Возвращает стейт TYPING_INVITEE_ID.
     """
     query = update.callback_query
     await query.answer()
 
     raw_click_data: str = query.data
-    index_record: int = int(raw_click_data.split(':')[-1])
+    index_record: int = int(raw_click_data.split(":")[-1])
 
-    event_text_record = context.user_data.get('event_text_record')
+    event_text_record = context.user_data.get("event_text_record")
 
-    context.user_data['invite_event_id'] = event_text_record[index_record]['id']
-    event_title = event_text_record[index_record]['title']
+    context.user_data["invite_event_id"] = event_text_record[index_record]["id"]
+    event_title = event_text_record[index_record]["title"]
 
     text = (
         f"Выбрано событие: *{event_title}*\n\n"
@@ -75,38 +79,36 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
     )
 
     await query.edit_message_text(
-        text=text,
-        reply_markup=generate_back_to_menu_button(),
-        parse_mode="Markdown"
+        text=text, reply_markup=generate_back_to_menu_button(), parse_mode="Markdown"
     )
     return TYPING_INVITEE_ID
 
+
 async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Ловит и валидирует Telegram ID приглашаемого (гостя). 
-    Проверяет наличие гостя в БД и его занятость. 
+    Ловит и валидирует Telegram ID приглашаемого (гостя).
+    Проверяет наличие гостя в БД и его занятость.
     При успехе создает приглашение (status=PENDING) и отправляет гостю сообщение с кнопками Принять/Отклонить.
     """
     # Вызываем утилиту валидации
     is_valid, validation_result = validate_telegram_id_input(
         input_text=update.message.text,
         current_user_id=update.effective_user.id,
-        self_error_msg="❌ Вы не можете пригласить самого себя. Введите ID другого пользователя:"
+        self_error_msg="❌ Вы не можете пригласить самого себя. Введите ID другого пользователя:",
     )
 
     if not is_valid:
         await update.message.reply_text(
-            validation_result,
-            reply_markup=generate_back_to_menu_button()
+            validation_result, reply_markup=generate_back_to_menu_button()
         )
         return TYPING_INVITEE_ID
-        
+
     invitee_id = validation_result
-    
-    event_id = context.user_data.get('invite_event_id')
+
+    event_id = context.user_data.get("invite_event_id")
     if not event_id:
         await update.message.reply_text("❗ Сессия устарела. Возвращаю вас в календарь.")
-        return await calendar_command(update, context) 
+        return await calendar_command(update, context)
 
     # 1. Проверяем, существует ли пользователь в базе (Django ORM)
     user_exists = await User.objects.filter(telegram_id=invitee_id).aexists()
@@ -115,22 +117,22 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
             "❌ Пользователь с таким ID *не зарегистрирован* в нашем боте.\n"
             "Проверьте ID и попробуйте еще раз:",
             reply_markup=generate_back_to_menu_button(),
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return TYPING_INVITEE_ID
 
     # 2. Достаем целевое событие (событие организатора)
     target_event = await Event.objects.aget(id=event_id)
-    
+
     # 3. Валидация пересечения временных интервалов (свободен ли гость)
     is_busy = await check_user_availability(invitee_id, target_event)
-    
+
     if is_busy:
         await update.message.reply_text(
             "❗ К сожалению, в это время пользователь *уже занят* (у него запланировано другое событие).\n\n"
             "Встреча не назначена. Выберите другое время или пригласите кого-то еще.",
             reply_markup=generate_back_to_menu_button(),
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return TYPING_INVITEE_ID
 
@@ -138,17 +140,19 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     appointment, created = await Appointment.objects.aget_or_create(
         event_id=target_event.id,
         invitee_id=invitee_id,
-        defaults={'status': Appointment.Status.PENDING}
+        defaults={"status": Appointment.Status.PENDING},
     )
 
     if not created:
         await update.message.reply_text(
             "ℹ️ Вы уже отправляли приглашение этому пользователю на данное событие.",
-            reply_markup=generate_back_to_menu_button()
-            )
+            reply_markup=generate_back_to_menu_button(),
+        )
         return TYPING_INVITEE_ID
     else:
-        inviter_name = update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
+        inviter_name = (
+            update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
+        )
         invite_text = (
             f"🔔 *Новое приглашение!*\n\n"
             f"*{inviter_name}* приглашает вас на событие:\n"
@@ -157,7 +161,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         )
         if target_event.start_time:
             invite_text += f"⏰ Время: {target_event.start_time.strftime('%H:%M')}\n"
-        
+
         invite_text += "\nПримете приглашение?"
 
         try:
@@ -166,24 +170,25 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
                 chat_id=invitee_id,
                 text=invite_text,
                 reply_markup=generate_confirm_invite_keyboard(appointment.id),
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
             # Отчитываемся организатору об успехе
             await update.message.reply_text(
                 f"✅ Приглашение успешно создано!\n"
                 f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
                 reply_markup=generate_back_to_menu_button(),
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
         except TelegramError:
             # Гость заблокировал бота
             await update.message.reply_text(
                 "❗ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
-                reply_markup=generate_back_to_menu_button()
+                reply_markup=generate_back_to_menu_button(),
             )
             await appointment.adelete()
-            
+
     return TYPING_INVITEE_ID
+
 
 async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -193,12 +198,12 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
 
     # Разбираем callback_data (пример: "invite:accept:15")
-    _, action, appointment_id_str = query.data.split(':')
+    _, action, appointment_id_str = query.data.split(":")
     appointment_id = int(appointment_id_str)
 
     try:
         # Достаем встречу вместе с объектом события через JOIN
-        appointment = await Appointment.objects.select_related('event').aget(id=appointment_id)
+        appointment = await Appointment.objects.select_related("event").aget(id=appointment_id)
     except Appointment.DoesNotExist:
         await query.edit_message_text("❗ Это приглашение больше не существует или было отменено.")
         return
@@ -211,10 +216,10 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
     inviter_id = appointment.event.user_id
     original_event = appointment.event
 
-    if action == 'accept':
+    if action == "accept":
         # 1. Повторная валидация времени гостя
         is_busy = await check_user_availability(query.from_user.id, appointment.event)
-        
+
         if is_busy:
             await query.edit_message_text(
                 "❗ Вы не можете принять приглашение: на это время у вас уже запланировано другое событие."
@@ -224,7 +229,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         # 2. Подтверждаем встречу в промежуточной таблице
         appointment.status = Appointment.Status.CONFIRMED
         await appointment.asave()
-        
+
         guest_description = f"🤝 Встреча с пользователем {inviter_id}."
         if original_event.description:
             guest_description += f"\nОригинальное описание: {original_event.description}"
@@ -237,7 +242,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             description=guest_description,
             event_date=original_event.event_date,
             start_time=original_event.start_time,
-            end_time=original_event.end_time
+            end_time=original_event.end_time,
         )
 
         # 4. Меняем сообщение у гостя
@@ -249,16 +254,16 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(
                 chat_id=inviter_id,
                 text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{original_event.title}*.",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
         except TelegramError as e:
             logger.warning(f"Не удалось уведомить организатора {inviter_id} о принятии: {e}")
             await query.edit_message_text(
                 text=f"{success_text}\n\n*Внимание:* Организатор не получил уведомление (возможно, он заблокировал бота).",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
 
-    elif action == 'reject':
+    elif action == "reject":
         reject_text = f"❌ Вы *отказались* от приглашения на событие: {original_event.title}"
         await query.edit_message_text(text=reject_text, parse_mode="Markdown")
 
@@ -267,17 +272,18 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(
                 chat_id=inviter_id,
                 text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{original_event.title}*.",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
         except TelegramError as e:
             logger.warning(f"Не удалось уведомить организатора {inviter_id} об отказе: {e}")
             await query.edit_message_text(
                 text=f"{reject_text}\n\n*Внимание:* Организатор не получил уведомление (возможно, он заблокировал бота).",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
 
         appointment.status = Appointment.Status.CANCELLED
         await appointment.asave()
+
 
 async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -285,7 +291,8 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # 1. Забираем ВСЕ встречи за один поход в БД
     meetings: list[Appointment] = [
-        meeting async for meeting in Appointment.objects.select_related('event').filter(
+        meeting
+        async for meeting in Appointment.objects.select_related("event").filter(
             Q(event__user_id=telegram_id) | Q(invitee_id=telegram_id)
         )
     ]
@@ -301,13 +308,15 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
         for i, meeting in enumerate(my_invites, 1):
             event = meeting.event
             date_str = event.event_date.strftime("%d.%m.%Y")
-            
+
             # Проверка на тип события (может не быть start_time, если ALL_DAY)
             if event.start_time and event.end_time:
-                time_str = f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+                time_str = (
+                    f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+                )
             else:
                 time_str = "Весь день"
-                
+
             status = meeting.get_status_display()
 
             text_my += (
@@ -325,12 +334,14 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
         for i, meeting in enumerate(invites_to_me, 1):
             event = meeting.event
             date_str = event.event_date.strftime("%d.%m.%Y")
-            
+
             if event.start_time and event.end_time:
-                time_str = f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+                time_str = (
+                    f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+                )
             else:
                 time_str = "Весь день"
-                
+
             status = meeting.get_status_display()
 
             text_others += (
@@ -345,79 +356,77 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
     # Склеивание результата
     final_text = f"{text_my}➖➖➖➖➖➖➖➖➖➖\n{text_others}"
 
-
     await query.edit_message_text(
-        text=final_text,
-        parse_mode="Markdown",
-        reply_markup=generate_back_calendar_button()
+        text=final_text, parse_mode="Markdown", reply_markup=generate_back_calendar_button()
     )
 
 
-async def handle_ask_telegram_id_for_public_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_ask_telegram_id_for_public_events(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     query = update.callback_query
 
     text = "Отправьте *Telegram ID* пользователя, события которого хотите посмотреть:"
 
     await query.edit_message_text(
-        text=text,
-        parse_mode="Markdown",
-        reply_markup=generate_back_calendar_button()
+        text=text, parse_mode="Markdown", reply_markup=generate_back_calendar_button()
     )
     return TYPING_PUBLIC_EVENTS_USER_ID
 
 
-async def handle_show_public_events_another_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def handle_show_public_events_another_user(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     # Вызываем утилиту валидации
     is_valid, validation_result = validate_telegram_id_input(
         input_text=update.message.text,
         current_user_id=update.effective_user.id,
-        self_error_msg="❌ В этом меню Вы не можете смотреть свои заметки. Введите ID другого пользователя:"
+        self_error_msg="❌ В этом меню Вы не можете смотреть свои заметки. Введите ID другого пользователя:",
     )
 
     if not is_valid:
         await update.message.reply_text(validation_result)
         return TYPING_PUBLIC_EVENTS_USER_ID
-        
+
     telegram_id_another_user = validation_result
 
-    public_events = Event.objects.filter(
-        user_id=telegram_id_another_user,
-        is_public=True
-    ).order_by('event_date', 'start_time')
+    public_events = Event.objects.filter(user_id=telegram_id_another_user, is_public=True).order_by(
+        "event_date", "start_time"
+    )
 
     if not await public_events.aexists():
         await update.message.reply_text(
             "❌ У пользователя с таким Telegram ID нет публичных событий.",
-            reply_markup=generate_back_calendar_button()
+            reply_markup=generate_back_calendar_button(),
         )
         return TYPING_PUBLIC_EVENTS_USER_ID
 
     events_dicts = [
         {
-            'title': event.title,
-            'start_time': event.start_time,
-            'end_time': event.end_time,
-            'description': event.description,
-            'is_public': event.is_public,
-            'event_date': event.event_date
+            "title": event.title,
+            "start_time": event.start_time,
+            "end_time": event.end_time,
+            "description": event.description,
+            "is_public": event.is_public,
+            "event_date": event.event_date,
         }
         async for event in public_events
     ]
-    
+
     text_blocks = [f"🌐 *Публичные события пользователя {telegram_id_another_user}:*\n"]
-    
+
     for idx in range(len(events_dicts)):
-        text_blocks.append(build_detailed_event_text(events_dicts, index=idx, numbered=True, is_show_date=True))
+        text_blocks.append(
+            build_detailed_event_text(events_dicts, index=idx, numbered=True, is_show_date=True)
+        )
 
     final_text = "\n".join(text_blocks)
-    
+
     if len(final_text) > 4000:
         final_text = final_text[:4000] + "\n\n... (показана только часть событий)"
 
     await update.message.reply_text(
-        text=final_text,
-        parse_mode="Markdown",
-        reply_markup=generate_back_calendar_button()
+        text=final_text, parse_mode="Markdown", reply_markup=generate_back_calendar_button()
     )
-    
+
     return ConversationHandler.END

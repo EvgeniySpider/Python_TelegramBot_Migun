@@ -1,6 +1,7 @@
-import pytest
 import datetime
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from telegram import InlineKeyboardMarkup
 
 from app.handlers.calendar_callbacks import handle_calendar_click, handle_calendar_nav_click
@@ -8,8 +9,8 @@ from app.handlers.states import CHOOSING_ACTION, CHOOSING_TIME
 
 
 @pytest.mark.asyncio
-@patch('app.handlers.calendar_callbacks.CalendarRepository.get_events_by_date')
-@patch('app.handlers.calendar_callbacks.generate_time_options_keyboard')
+@patch("app.handlers.calendar_callbacks.CalendarRepository.get_events_by_date")
+@patch("app.handlers.calendar_callbacks.generate_time_options_keyboard")
 async def test_handle_calendar_click_free_day(mock_generate_keyboard, mock_get_events):
     # 1. ПОДГОТОВКА МОКОВ
     # Возвращаем пустой список (или falsy значение), имитируя отсутствие событий на этот день
@@ -20,28 +21,32 @@ async def test_handle_calendar_click_free_day(mock_generate_keyboard, mock_get_e
     # Имитируем callback_data от клика по 1 октября 2026 года
     update_mock.callback_query.data = "calendar_day:2026:10:1"
     update_mock.effective_user.id = 12345
-    
+
     # Исходное состояние user_data — пустое или без флага редактирования
     context_mock.user_data = {}
-    
+
     # Мокаем статистику (это асинхронный вызов)
     context_mock.application.stats_repository.increment_metric = AsyncMock()
 
     # Шашлык для контекстного менеджера БД
     connection_mock = MagicMock()
-    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+    context_mock.application.database.connection.return_value.__aenter__.return_value = (
+        connection_mock
+    )
 
     # 2. ВЫЗОВ ХЭНДЛЕРА
     result = await handle_calendar_click(update_mock, context_mock)
 
     # 3. ПРОВЕРКИ
     # Проверяем инкремент метрики
-    context_mock.application.stats_repository.increment_metric.assert_called_once_with('calendar_clicks')
+    context_mock.application.stats_repository.increment_metric.assert_called_once_with(
+        "calendar_clicks"
+    )
 
     # Проверяем сохранение даты в ОЗУ
     expected_date = datetime.date(2026, 10, 1)
-    assert context_mock.user_data['selected_date'] == expected_date
-    assert context_mock.user_data['event_text_record'] == []
+    assert context_mock.user_data["selected_date"] == expected_date
+    assert context_mock.user_data["event_text_record"] == []
 
     # Проверяем, что часики загрузки погашены
     update_mock.callback_query.answer.assert_called_once()
@@ -55,26 +60,26 @@ async def test_handle_calendar_click_free_day(mock_generate_keyboard, mock_get_e
     # Проверяем, что сообщение было изменено, и проверяем его содержимое
     update_mock.callback_query.edit_message_text.assert_called_once()
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
-    assert "На этот день ничего не запланировано" in kwargs['text']
-    assert "01.10.2026" in kwargs['text']
-    assert kwargs['reply_markup'] == "fake_time_keyboard"
+    assert "На этот день ничего не запланировано" in kwargs["text"]
+    assert "01.10.2026" in kwargs["text"]
+    assert kwargs["reply_markup"] == "fake_time_keyboard"
 
     # Гарантируем, что ConversationHandler получил правильный сигнал перехода в следующее состояние
     assert result == CHOOSING_TIME
 
 
 @pytest.mark.asyncio
-@patch('app.handlers.calendar_callbacks.CalendarRepository.get_events_by_date')
-@patch('app.handlers.calendar_callbacks.generate_options_keyboard')
+@patch("app.handlers.calendar_callbacks.CalendarRepository.get_events_by_date")
+@patch("app.handlers.calendar_callbacks.generate_options_keyboard")
 async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_events):
     fake_event = [
         {
-            'title': 'День рождения',
-            'start_time': None,  # Триггерит 'Весь день'
-            'end_time': None,
-            'description': None, # Триггерит 'Не указано'
-            'is_public': True,   # Триггерит '👁 Публичное'
-            'event_date': datetime.date(2026, 10, 20)
+            "title": "День рождения",
+            "start_time": None,  # Триггерит 'Весь день'
+            "end_time": None,
+            "description": None,  # Триггерит 'Не указано'
+            "is_public": True,  # Триггерит '👁 Публичное'
+            "event_date": datetime.date(2026, 10, 20),
         }
     ]
 
@@ -87,25 +92,29 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
     update_mock.callback_query.data = "calendar_day:2026:10:20"
     update_mock.effective_user.id = 12345
     update_mock.callback_query.edit_message_text = AsyncMock()
-    
+
     # Исходное состояние user_data — пустое или без флага редактирования
     context_mock.user_data = {}
-    
+
     # Мокаем статистику (это асинхронный вызов)
     context_mock.application.stats_repository.increment_metric = AsyncMock()
 
     # Шашлык для контекстного менеджера БД
     connection_mock = MagicMock()
-    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
-    
+    context_mock.application.database.connection.return_value.__aenter__.return_value = (
+        connection_mock
+    )
+
     # ВЫЗОВ
     result = await handle_calendar_click(update_mock, context_mock)
 
-    context_mock.application.stats_repository.increment_metric.assert_called_once_with('calendar_clicks')
+    context_mock.application.stats_repository.increment_metric.assert_called_once_with(
+        "calendar_clicks"
+    )
 
     expected_date = datetime.date(2026, 10, 20)
-    assert context_mock.user_data['selected_date'] == expected_date
-    assert context_mock.user_data['event_text_record'] == fake_event
+    assert context_mock.user_data["selected_date"] == expected_date
+    assert context_mock.user_data["event_text_record"] == fake_event
     update_mock.callback_query.answer.assert_called_once()
 
     # Проверяем корректность параметров запроса к БД
@@ -114,16 +123,16 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
     # Проверяем, что генератор клавиатуры был вызван с is_adding=False (по дефолту)
     mock_generate_keyboard.assert_called_once()
 
-
     update_mock.callback_query.edit_message_text.assert_called_once()
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
-  
-    assert "📅 *Выбранная дата*: 20.10.2026" in kwargs['text']
-    assert "День рождения" in kwargs['text']
-    assert "20.10.2026" in kwargs['text']
-    assert kwargs['reply_markup'] == "fake_options_keyboard"
+
+    assert "📅 *Выбранная дата*: 20.10.2026" in kwargs["text"]
+    assert "День рождения" in kwargs["text"]
+    assert "20.10.2026" in kwargs["text"]
+    assert kwargs["reply_markup"] == "fake_options_keyboard"
 
     assert result == CHOOSING_ACTION
+
 
 # ---------------------------------------------------------------------------------------------------
 # ТУТ ВСЁ
@@ -140,9 +149,9 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
         ("calendar_nav:2027:1", 2027, 1, "Январь 2027"),
         # Переход через границу года: январь → декабрь
         ("calendar_nav:2025:12", 2025, 12, "Декабрь 2025"),
-    ]
+    ],
 )
-@patch('app.handlers.calendar_callbacks.CalendarService.get_user_busy_days')
+@patch("app.handlers.calendar_callbacks.CalendarService.get_user_busy_days")
 async def test_handle_calendar_nav_click(
     mock_get_busy_days: AsyncMock,
     callback_data: str,
@@ -163,7 +172,7 @@ async def test_handle_calendar_nav_click(
     mock_conn = AsyncMock()
     context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
 
-    fake_busy_days = {5: 'full', 10: 'partial'}
+    fake_busy_days = {5: "full", 10: "partial"}
     mock_get_busy_days.return_value = fake_busy_days
 
     # 2. Вызов хэндлера
@@ -174,19 +183,16 @@ async def test_handle_calendar_nav_click(
 
     # 4. Проверяем запрос busy_days именно под целевой месяц/год
     mock_get_busy_days.assert_awaited_once_with(
-        conn=mock_conn,
-        user_id=555,
-        year=expected_year,
-        month=expected_month
+        conn=mock_conn, user_id=555, year=expected_year, month=expected_month
     )
 
     # 5. Проверяем синхронизацию ОЗУ
-    assert context_mock.user_data['month_busy_days'] == fake_busy_days
+    assert context_mock.user_data["month_busy_days"] == fake_busy_days
 
     # 6. Распаковываем клавиатуру из edit_message_reply_markup
     update_mock.callback_query.edit_message_reply_markup.assert_awaited_once()
     kwargs = update_mock.callback_query.edit_message_reply_markup.call_args.kwargs
-    markup: InlineKeyboardMarkup = kwargs['reply_markup']
+    markup: InlineKeyboardMarkup = kwargs["reply_markup"]
 
     # Собираем все кнопки в плоский список
     all_buttons = [btn for row in markup.inline_keyboard for btn in row]

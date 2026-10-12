@@ -1,18 +1,19 @@
 from datetime import date
 from typing import Literal, get_args
+
 from app.infra.postgres.db import Database
 
 # Белый список колонок, чтобы защититься от SQL-инъекций
 MetricColumn = Literal[
-    'new_users_count',
-    'calendar_clicks',
-    'events_created_all_day',
-    'events_created_exact',
-    'events_created_interval',
-    'events_edited',
-    'events_deleted'
+    "new_users_count",
+    "calendar_clicks",
+    "events_created_all_day",
+    "events_created_exact",
+    "events_created_interval",
+    "events_edited",
+    "events_deleted",
 ]
-UserMetricColumn = Literal['events_created', 'events_edited', 'events_cancelled']
+UserMetricColumn = Literal["events_created", "events_edited", "events_cancelled"]
 
 
 ALLOWED_METRICS: tuple[str] = get_args(MetricColumn)
@@ -43,13 +44,14 @@ class StatsRepository:
         async with self.db.connection() as conn:
             await conn.execute(query, today, amount)
 
-
-    async def increment_user_metric(self, telegram_id: int, metric_name: UserMetricColumn, amount: int = 1) -> None:
+    async def increment_user_metric(
+        self, telegram_id: int, metric_name: UserMetricColumn, amount: int = 1
+    ) -> None:
         """Инкрементирует персональную статистику действий конкретного пользователя."""
         if metric_name not in ALLOWED_USER_METRICS:
             raise ValueError(f"Недопустимая метрика пользователя: {metric_name}")
 
-        # Запрос обновляет счетчик у существующего юзера. 
+        # Запрос обновляет счетчик у существующего юзера.
         # (Пользователь гарантированно существует, т.к. создается при /start)
         query = f"""
             UPDATE users 

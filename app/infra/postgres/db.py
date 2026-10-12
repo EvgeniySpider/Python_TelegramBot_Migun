@@ -1,7 +1,8 @@
-import asyncpg
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
-from pydantic import Secret, PostgresDsn
+
+import asyncpg
+from pydantic import PostgresDsn, Secret
 
 
 class Database:
@@ -13,8 +14,8 @@ class Database:
         dns_string = str(self._dsn.get_secret_value())
 
         self._pool = await asyncpg.create_pool(
-        dsn=dns_string,
-        timeout=5.0  # Ждать освобождения коннекта максимум 5 секунд
+            dsn=dns_string,
+            timeout=5.0,  # Ждать освобождения коннекта максимум 5 секунд
         )
 
     async def shutdown(self) -> None:

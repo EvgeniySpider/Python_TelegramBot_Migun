@@ -1,5 +1,7 @@
+from datetime import datetime, time
+
 import psycopg2
-from datetime import time, datetime
+
 from settings.config import AppSettings
 
 settings = AppSettings()
@@ -12,10 +14,12 @@ if settings.telegram_id is None or settings.telegram_id == 12345:
 
 YOUR_TELEGRAM_ID = settings.telegram_id
 
+
 def get_current_year_and_month() -> tuple:
     """Вспомогательная функция: возвращает текущий год и месяц."""
     now = datetime.now()
     return now.year, now.month
+
 
 def seed_test_data_usual_events() -> None:
     print("Запуск заполнения тестовыми данными (фиксированные дни 6, 18, 25)...")
@@ -33,14 +37,50 @@ def seed_test_data_usual_events() -> None:
     day_exact = 25
 
     test_events = [
-        (YOUR_TELEGRAM_ID, 'all_day', 'Поездка на дачу',
-         datetime(year, month, day_all_day).date(), None, None, now, 'Шашлык машлык', False),
-        (YOUR_TELEGRAM_ID, 'interval', 'Созвон по проекту',
-         datetime(year, month, day_interval).date(), time(14, 0, 0), time(15, 0, 0), now, 'Обсудить архитектуру бота', False),
-        (YOUR_TELEGRAM_ID, 'interval', 'Созвон по проекту',
-         datetime(year, month, day_interval).date(), time(9, 0, 0), time(10, 0, 0), now, 'Погулять с хорошим мальчиком', False),
-        (YOUR_TELEGRAM_ID, 'exact', 'Отключить компрессор',
-         datetime(year, month, day_exact).date(), time(19, 30, 0), time(20, 0, 0), now, None, False)
+        (
+            YOUR_TELEGRAM_ID,
+            "all_day",
+            "Поездка на дачу",
+            datetime(year, month, day_all_day).date(),
+            None,
+            None,
+            now,
+            "Шашлык машлык",
+            False,
+        ),
+        (
+            YOUR_TELEGRAM_ID,
+            "interval",
+            "Созвон по проекту",
+            datetime(year, month, day_interval).date(),
+            time(14, 0, 0),
+            time(15, 0, 0),
+            now,
+            "Обсудить архитектуру бота",
+            False,
+        ),
+        (
+            YOUR_TELEGRAM_ID,
+            "interval",
+            "Созвон по проекту",
+            datetime(year, month, day_interval).date(),
+            time(9, 0, 0),
+            time(10, 0, 0),
+            now,
+            "Погулять с хорошим мальчиком",
+            False,
+        ),
+        (
+            YOUR_TELEGRAM_ID,
+            "exact",
+            "Отключить компрессор",
+            datetime(year, month, day_exact).date(),
+            time(19, 30, 0),
+            time(20, 0, 0),
+            now,
+            None,
+            False,
+        ),
     ]
 
     with psycopg2.connect(settings.secret_dsn.get_secret_value()) as conn:
@@ -51,12 +91,14 @@ def seed_test_data_usual_events() -> None:
                 VALUES (%s, %s, 0, 0, 0) 
                 ON CONFLICT DO NOTHING;
                 """,
-                (YOUR_TELEGRAM_ID, now)
+                (YOUR_TELEGRAM_ID, now),
             )
             cursor.executemany(insert_query, test_events)
             conn.commit()
 
-    print(f"Тестовые события успешно добавлены на фиксированные числа: {day_all_day}, {day_interval}, {day_exact} текущего месяца!")
+    print(
+        f"Тестовые события успешно добавлены на фиксированные числа: {day_all_day}, {day_interval}, {day_exact} текущего месяца!"
+    )
 
 
 def seed_test_data() -> None:
@@ -71,7 +113,9 @@ def seed_test_data() -> None:
     limit_test_day = 15
     test_date = datetime(year, month, limit_test_day).date()
 
-    print(f"Генерация 11 плотных последовательных событий на фиксированный день лимитов: {test_date}...")
+    print(
+        f"Генерация 11 плотных последовательных событий на фиксированный день лимитов: {test_date}..."
+    )
 
     test_events = []
     for i in range(11):
@@ -80,14 +124,14 @@ def seed_test_data() -> None:
 
         event_tuple = (
             YOUR_TELEGRAM_ID,
-            'interval',
-            f'Тестовая задача №{i+1}',
+            "interval",
+            f"Тестовая задача №{i + 1}",
             test_date,
             time(start_hour, 0, 0),
             time(end_hour, 0, 0),
             now,
-            f'Описание для задачи {i+1}',
-            False
+            f"Описание для задачи {i + 1}",
+            False,
         )
         test_events.append(event_tuple)
 
@@ -99,12 +143,13 @@ def seed_test_data() -> None:
                 VALUES (%s, %s, 0, 0, 0) 
                 ON CONFLICT DO NOTHING;
                 """,
-                (YOUR_TELEGRAM_ID, now)
+                (YOUR_TELEGRAM_ID, now),
             )
             cursor.executemany(insert_query, test_events)
             conn.commit()
 
     print(f"Успешно добавлено 11 плотных событий для тестирования лимитов на {test_date}!")
+
 
 if __name__ == "__main__":
     seed_test_data_usual_events()

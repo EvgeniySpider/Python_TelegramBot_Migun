@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from app.infra.postgres.db import Database
 from datetime import datetime
+
+from app.infra.postgres.db import Database
 
 
 @dataclass
@@ -10,19 +11,15 @@ class UserRepository:
     async def create_user_if_not_exists(self, user_id: int) -> None:
         current_time = datetime.now()
         current_date = current_time.date()
-        
-        async with self.database.connection() as conn:
 
-            user_exists = await conn.fetchval(
-                "SELECT 1 FROM users WHERE telegram_id = $1", 
-                user_id
-            )
+        async with self.database.connection() as conn:
+            user_exists = await conn.fetchval("SELECT 1 FROM users WHERE telegram_id = $1", user_id)
 
             if not user_exists:
                 await conn.execute(
                     "INSERT INTO users (telegram_id, registered_at) VALUES ($1, $2)",
                     user_id,
-                    current_time
+                    current_time,
                 )
 
                 await conn.execute(
@@ -34,5 +31,5 @@ class UserRepository:
                     ON CONFLICT (date) DO UPDATE 
                     SET new_users_count = events_botstatistics.new_users_count + 1
                     """,
-                    current_date
+                    current_date,
                 )

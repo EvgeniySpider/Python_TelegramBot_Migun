@@ -1,5 +1,6 @@
-from django.db import models
 import secrets
+
+from django.db import models
 from django.utils import timezone
 
 
@@ -13,28 +14,18 @@ class User(models.Model):
     def is_authenticated(self):
         """Флаг совместимости с DRF. Если объект получен по токену — он авторизован."""
         return True
-    
-    events_created = models.PositiveIntegerField(
-        default=0, verbose_name="Создано событий"
-    )
-    events_edited = models.PositiveIntegerField(
-        default=0, verbose_name="Отредактировано событий"
-    )
+
+    events_created = models.PositiveIntegerField(default=0, verbose_name="Создано событий")
+    events_edited = models.PositiveIntegerField(default=0, verbose_name="Отредактировано событий")
     events_cancelled = models.PositiveIntegerField(
         default=0, verbose_name="Отменено/удалено событий"
     )
 
     api_token = models.CharField(
-        max_length=64, 
-        unique=True, 
-        null=True, 
-        blank=True, 
-        verbose_name="API Токен"
+        max_length=64, unique=True, null=True, blank=True, verbose_name="API Токен"
     )
     api_token_created_at = models.DateTimeField(
-        null=True, 
-        blank=True, 
-        verbose_name="Время создания токена"
+        null=True, blank=True, verbose_name="Время создания токена"
     )
 
     class Meta:
@@ -50,7 +41,7 @@ class User(models.Model):
         self.api_token = secrets.token_urlsafe(32)
         self.api_token_created_at = timezone.now()
         # Сохраняем только нужные поля для оптимизации запроса
-        await self.asave(update_fields=['api_token', 'api_token_created_at'])
+        await self.asave(update_fields=["api_token", "api_token_created_at"])
         return self.api_token
 
 
@@ -82,9 +73,9 @@ class Event(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     is_public = models.BooleanField(
-        default=False, 
+        default=False,
         verbose_name="Публичное",
-        help_text="Доступно ли событие для просмотра другим пользователям"
+        help_text="Доступно ли событие для просмотра другим пользователям",
     )
 
     class Meta:
@@ -106,23 +97,17 @@ class Appointment(models.Model):
 
     # Событие (в нем уже лежат дата, время и организатор - event.user)
     event = models.ForeignKey(
-        Event, 
-        on_delete=models.CASCADE, 
-        related_name="appointments",
-        verbose_name="Событие"
+        Event, on_delete=models.CASCADE, related_name="appointments", verbose_name="Событие"
     )
     # Кого приглашаем
     invitee = models.ForeignKey(
-        User, 
-        on_delete=models.CASCADE, 
+        User,
+        on_delete=models.CASCADE,
         related_name="invitations",
-        verbose_name="Приглашенный (Участник)"
+        verbose_name="Приглашенный (Участник)",
     )
     status = models.CharField(
-        max_length=20, 
-        choices=Status.choices, 
-        default=Status.PENDING,
-        verbose_name="Статус"
+        max_length=20, choices=Status.choices, default=Status.PENDING, verbose_name="Статус"
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
 
@@ -131,7 +116,7 @@ class Appointment(models.Model):
         verbose_name = "Встреча"
         verbose_name_plural = "Встречи"
         # Защита от дублей: один юзер может быть приглашен на одно событие только один раз
-        unique_together = ('event', 'invitee')
+        unique_together = ("event", "invitee")
 
     def __str__(self) -> str:
         return f"Встреча: {self.event.user_id} пригласил {self.invitee_id} на '{self.event.title}'"
@@ -141,12 +126,8 @@ class BotStatistics(models.Model):
     date = models.DateField(unique=True, verbose_name="Дата")
 
     # Слой 1: Пользователи и Активность
-    new_users_count = models.PositiveIntegerField(
-        default=0, verbose_name="Новых пользователей"
-    )
-    calendar_clicks = models.PositiveIntegerField(
-        default=0, verbose_name="Кликов по календарю"
-    )
+    new_users_count = models.PositiveIntegerField(default=0, verbose_name="Новых пользователей")
+    calendar_clicks = models.PositiveIntegerField(default=0, verbose_name="Кликов по календарю")
 
     # Слой 2: Создание событий
     events_created_all_day = models.PositiveIntegerField(
@@ -160,12 +141,8 @@ class BotStatistics(models.Model):
     )
 
     # Слой 3: Действия над событиями
-    events_edited = models.PositiveIntegerField(
-        default=0, verbose_name="Изменено событий"
-    )
-    events_deleted = models.PositiveIntegerField(
-        default=0, verbose_name="Удалено событий"
-    )
+    events_edited = models.PositiveIntegerField(default=0, verbose_name="Изменено событий")
+    events_deleted = models.PositiveIntegerField(default=0, verbose_name="Удалено событий")
 
     class Meta:
         verbose_name = "Статистика бота"
@@ -179,7 +156,5 @@ class BotStatistics(models.Model):
     def total_events_created(self):
         """Вспомогательное свойство: общее кол-во созданных событий за день"""
         return (
-            self.events_created_all_day
-            + self.events_created_exact
-            + self.events_created_interval
+            self.events_created_all_day + self.events_created_exact + self.events_created_interval
         )

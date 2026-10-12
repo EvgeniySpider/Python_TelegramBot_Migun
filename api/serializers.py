@@ -182,6 +182,7 @@ class EventUpdateSerializer(ModelSerializer):
 
         is_invitee_meeting = Appointment.objects.filter(
             invitee=user,
+            status=Appointment.Status.CONFIRMED,
             event__event_date=event.event_date,
             event__start_time=event.start_time,
             event__end_time=event.end_time,

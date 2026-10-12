@@ -131,7 +131,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 return CHOOSING_ACTION
 
-            if await Appointment.objects.filter(event=event_rec["id"]).aexists():
+            if await Appointment.objects.filter(event=event_rec["id"], status=Appointment.Status.CONFIRMED).aexists():
                 await query.answer(
                     "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
                 )

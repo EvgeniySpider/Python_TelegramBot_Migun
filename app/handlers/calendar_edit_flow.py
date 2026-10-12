@@ -170,7 +170,7 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
         )
         return SELECTING_EDIT_EVENT
 
-    if await Appointment.objects.filter(event=event_rec["id"]).aexists():
+    if await Appointment.objects.filter(event=event_rec["id"], status = Appointment.Status.CONFIRMED).aexists():
         await query.answer(
             "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
         )
@@ -221,7 +221,7 @@ async def handle_edit_event_by_text_number(
         )
         return TYPING_EDIT_NUM
 
-    if await Appointment.objects.filter(event=event_rec["id"]).aexists():
+    if await Appointment.objects.filter(event=event_rec["id"], status=Appointment.Status.CONFIRMED).aexists():
         await update.message.reply_text(
             "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
         )

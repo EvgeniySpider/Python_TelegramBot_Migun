@@ -114,7 +114,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         # ==========================================
         # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
         # ==========================================
-        hosted_appointments = Appointment.objects.filter(event=instance)
+        hosted_appointments = Appointment.objects.filter(event=instance, status=Appointment.Status.CONFIRMED)
 
         if hosted_appointments.exists():
             for appt in hosted_appointments:
@@ -151,6 +151,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         else:
             appt_as_invitee = Appointment.objects.filter(
                 invitee=user,
+                status=Appointment.Status.CONFIRMED,
                 event__event_date=instance.event_date,
                 event__start_time=instance.start_time,
                 event__end_time=instance.end_time,

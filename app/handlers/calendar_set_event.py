@@ -71,6 +71,7 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return WAITING_FOR_TIME_INPUT_INTERVAL
 
+    return CHOOSING_TIME
 
 async def handle_time_input_interval(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     raw_time = update.message.text.strip().replace(" ", "")
@@ -217,6 +218,8 @@ async def handle_desc_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if query.data == "desc_yes":
         await query.edit_message_text(text="📝 Введите текст описания (заметки) для мероприятия:")
         return WAITING_FOR_DESCRIPTION
+
+    return WAITING_FOR_DESC_CHOICE
 
 
 async def handle_description_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

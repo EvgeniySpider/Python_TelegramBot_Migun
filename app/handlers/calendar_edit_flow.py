@@ -74,6 +74,7 @@ async def handle_edit_field_click(update: Update, context: ContextTypes.DEFAULT_
         # Пользователь остается в меню выбора поля для редактирования
         return CHOOSING_EDIT_FIELD
 
+    return CHOOSING_EDIT_FIELD
 
 # --- ОБРАБОТКА ВВОДА ТЕКСТА ---
 async def handle_typing_edit_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

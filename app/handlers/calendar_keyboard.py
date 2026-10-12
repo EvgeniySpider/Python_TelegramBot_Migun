@@ -22,7 +22,7 @@ def generate_calendar_keyboard(
     year: int,
     month: int,
     busy_days: dict[int, str] | None = None,
-    editing_day: int = None,
+    editing_day: int | None = None,
     is_back_button: bool = False,
 ) -> InlineKeyboardMarkup:
     """Генерирует календарь с inline-кнопками"""

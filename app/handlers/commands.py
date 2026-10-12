@@ -31,7 +31,7 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # 1. АДАПТИВНОЕ ОПРЕДЕЛЕНИЕ ЦЕЛЕВОЙ ДАТЫ
     # Если вызов прилетел из инлайн-кнопки и в ОЗУ есть ранее выбранная дата
-    if update.callback_query and "selected_date" in context.user_data:
+    if update.callback_query and context.user_data and "selected_date" in context.user_data:
         extracted_date = context.user_data["selected_date"]
         year = extracted_date.year
         month = extracted_date.month

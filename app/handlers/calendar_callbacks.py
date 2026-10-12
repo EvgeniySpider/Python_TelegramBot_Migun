@@ -2,7 +2,7 @@ import datetime
 
 import asyncpg
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.services import CalendarService
@@ -28,7 +28,7 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
     parts = query.data.split(":")
     if parts[0] != "calendar_day":
         await query.answer()
-        return
+        return ConversationHandler.END
 
     stats_repo: StatsRepository = context.application.stats_repository
     await stats_repo.increment_metric("calendar_clicks")
@@ -68,7 +68,7 @@ async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_options_with_exist_notes_in_day(
-    events_text: str, args: tuple, header: str = None
+    events_text: str, args: tuple, header: str | None = None
 ) -> int:
     """
     Универсальный хэндлер для отображения главного меню дня (когда есть заметки).
@@ -99,7 +99,7 @@ async def handle_options_with_exist_notes_in_day(
 
 
 async def handle_time_selection_option(
-    args: tuple, events_text: str = None, is_adding: bool = False
+    args: tuple, events_text: str | None = None, is_adding: bool = False
 ) -> int:
     query, day, month, year = args
     # ---- СЦЕНАРИЙ Б: НА ЭТОТ ДЕНЬ НЕТ СОБЫТИЙ / ИЛИ НАЖАТА КНОПКА "ДОБАВИТЬ" ----

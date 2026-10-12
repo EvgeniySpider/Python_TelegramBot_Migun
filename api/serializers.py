@@ -101,6 +101,8 @@ class EventSerializer(ModelSerializer):
             if start_time > time(23, 29):
                 end_time = time(23, 59)
             else:
+                if not event_date or not start_time:
+                    raise ValidationError("Необходимо указать дату и время.")
                 start_dt = datetime.combine(event_date, start_time)
                 end_time = (start_dt + timedelta(minutes=30)).time()
 

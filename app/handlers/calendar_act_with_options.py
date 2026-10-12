@@ -204,6 +204,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
         # Если заметок больше одной — отдаем отрисовку списка помощнику
         return await show_event_selection_list(query, event_text_record, action="delete")
 
+    return CHOOSING_ACTION
 
 async def handle_back_to_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()

@@ -357,6 +357,7 @@ class AsyncMockQuerySet:
 
     def __init__(self, items):
         self.items = items
+        self.aexists = AsyncMock(return_value=bool(items))
 
     async def __aiter__(self):
         for item in self.items:

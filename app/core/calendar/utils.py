@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import time
 
 from asyncpg import Record
@@ -42,7 +43,7 @@ def build_events_list_text(events: list[Record | dict], numbered: bool = False) 
 
 
 def build_detailed_event_text(
-    events: list[Record | dict], index: int = 0, numbered: bool = False, is_show_date: bool = False
+    events: Sequence[Record | dict], index: int = 0, numbered: bool = False, is_show_date: bool = False
 ) -> str:
     """
     Генерирует детальный текстовый профиль (карточку) конкретного события для просмотра и изменения.

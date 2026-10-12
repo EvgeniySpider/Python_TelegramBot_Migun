@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import django
 
@@ -36,7 +37,7 @@ class Application(PTBApplication):
         self.stats_repository = StatsRepository(db=self.database)
 
     @staticmethod
-    async def initialize_dependencies(application: "Application") -> None:
+    async def initialize_dependencies(application: Any) -> None:
         await application.database.initialize()
         await application.bot.set_my_commands(
             [
@@ -48,7 +49,7 @@ class Application(PTBApplication):
         )
 
     @staticmethod
-    async def shutdown_dependencies(application: "Application") -> None:
+    async def shutdown_dependencies(application: Any) -> None:
         await application.database.shutdown()
 
     def run(self) -> None:
@@ -71,7 +72,7 @@ def configure_logging():
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def create_app(app_settings: AppSettings) -> Application:
+def create_app(app_settings: AppSettings) -> Any:
     application = (
         ApplicationBuilder()
         .application_class(Application, kwargs={"app_settings": app_settings})

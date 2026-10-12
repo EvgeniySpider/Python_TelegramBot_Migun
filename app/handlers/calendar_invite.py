@@ -65,7 +65,7 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
     query = update.callback_query
     await query.answer()
 
-    raw_click_data: str = query.data
+    raw_click_data: str = str(query.data)
     index_record: int = int(raw_click_data.split(":")[-1])
 
     event_text_record = context.user_data.get("event_text_record")

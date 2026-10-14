@@ -18,7 +18,7 @@ class CalendarRepository:
                 EXTRACT(DAY FROM event_date)::INTEGER AS day,
                 CASE 
                     WHEN COUNT(*) FILTER (WHERE event_type = 'all_day') > 0 
-                         OR SUM(end_time - start_time) >= INTERVAL '24 hours' THEN 'full'
+                        OR SUM(end_time - start_time) >= INTERVAL '23 hours 59 minutes' THEN 'full'
                     ELSE 'partial'
                 END AS status
             FROM events

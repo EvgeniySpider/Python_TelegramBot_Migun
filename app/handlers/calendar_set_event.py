@@ -27,6 +27,8 @@ async def handle_set_event(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if parts[1] == "all_day":
         context.user_data["event_type"] = "all_day"
+        context.user_data["start_time"] = None
+        context.user_data["end_time"] = None
         month_busy_days = context.user_data.get("month_busy_days", {})
 
         if data.day in month_busy_days:

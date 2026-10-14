@@ -83,7 +83,7 @@ def seed_test_data_usual_events() -> None:
         ),
     ]
 
-    with psycopg2.connect(settings.secret_dsn.get_secret_value()) as conn:
+    with psycopg2.connect(str(settings.secret_dsn.get_secret_value())) as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
@@ -135,7 +135,7 @@ def seed_test_data() -> None:
         )
         test_events.append(event_tuple)
 
-    with psycopg2.connect(settings.secret_dsn.get_secret_value()) as conn:
+    with psycopg2.connect(str(settings.secret_dsn.get_secret_value())) as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """

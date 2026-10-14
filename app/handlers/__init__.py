@@ -65,11 +65,7 @@ calendar_conversation = ConversationHandler(
             CallbackQueryHandler(
                 handle_options_click,
                 pattern=r"^(action_create|action_edit|action_delete|action_invite)$",
-            ),
-            # Кнопка возврата к общей сетке календаря на текущий месяц
-            CallbackQueryHandler(
-                handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"
-            ),
+            )
         ],
         CHOOSING_EDIT_FIELD: [
             # Ловим клики по кнопкам "Название", "Описание", "Время", "Дата" или "Назад"
@@ -116,10 +112,6 @@ calendar_conversation = ConversationHandler(
         TYPING_PUBLIC_EVENTS_USER_ID: [
             # Ловим текст с ID
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_show_public_events_another_user),
-            # Позволяем выйти назад в календарь, если юзер передумал
-            CallbackQueryHandler(
-                handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"
-            ),
         ],
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
         CONFIRMING_DELETE: [
@@ -146,9 +138,6 @@ calendar_conversation = ConversationHandler(
             CallbackQueryHandler(handle_set_event, pattern=r"^event_time:.+$"),
             # Позволяет прервать сценарий создания и вернуться в сетку месяца
             CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^back_to_day_menu$"),
-            CallbackQueryHandler(
-                handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"
-            ),
         ],
         # СТEЙТ 6: Ожидание ввода точного времени начала (формат ЧЧ:ММ, например 14:15)
         WAITING_FOR_TIME_INPUT_EXACT: [
@@ -179,7 +168,10 @@ calendar_conversation = ConversationHandler(
     # Системные команды экстренного выхода, доступные пользователю на любом этапе диалога
     fallbacks=[
         # Сброс текущей ветки и вызов свежего календаря поверх старого интерфейса
-        CommandHandler("calendar", calendar_command)
+        CommandHandler("calendar", calendar_command),
+        CallbackQueryHandler(
+            handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"
+        )
     ],
     # Архитектурные флаги изоляции контекстов
     per_message=False,  # Состояние привязано к чату/юзеру, а не к конкретному сообщению
@@ -192,13 +184,15 @@ calendar_conversation = ConversationHandler(
 # КОРНЕВОЙ НАБОР ХЭНДЛЕРОВ ПРИЛОЖЕНИЯ (Глобальный scope)
 # ============================================================================
 HANDLERS: tuple[BaseHandler, ...] = (
+    # Подключение основной машины состояний
+    calendar_conversation,
     # Первичная инициализация пользователя при первом запуске бота
     CommandHandler("start", start),
     # Главная команда вызова интерактивного календаря текущего месяца
     CommandHandler("calendar", calendar_command),
     # Показывает все встречи пользователя
     CallbackQueryHandler(handle_show_meetings, pattern=r"^meetings$"),
-    CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^calendar$"),
+    CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"),
     # Навигационные кнопки календаря: переключение месяцев (<< Вперед / Назад >>)
     # Вынесено из ConversationHandler, так как навигация должна работать всегда,
     # независимо от того, находится ли юзер внутри процесса создания/удаления заметок
@@ -209,7 +203,5 @@ HANDLERS: tuple[BaseHandler, ...] = (
     # Выгрузка событий пользователя в форматах JSON и CSV
     CommandHandler(["exportjson", "exportcsv"], handle_export_events),
     # Получение или просмотр токена для запросов по API
-    CommandHandler(["api_token"], api_token_command),
-    # Подключение основной машины состояний
-    calendar_conversation,
+    CommandHandler(["api_token"], api_token_command)
 )

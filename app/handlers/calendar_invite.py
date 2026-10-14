@@ -251,7 +251,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         await Event.objects.acreate(
             user_id=query.from_user.id,
             event_type=original_event.event_type,
-            title=f"Встреча: {original_event.title}",
+            title=f"Встреча: {original_event.title}"[:255],
             description=guest_description,
             event_date=original_event.event_date,
             start_time=original_event.start_time,

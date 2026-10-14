@@ -100,7 +100,6 @@ async def notify_and_cancel_appointments(
             # aexists/afirst не нужны, метод adelete() на QuerySet удалит всё сам одним SQL-запросом
             await Event.objects.filter(
                 user_id=invitee_id,
-                title=f"Встреча: {local_event.title}"[:255],
                 event_date=local_event.event_date,
                 start_time=local_event.start_time,
                 end_time=local_event.end_time,

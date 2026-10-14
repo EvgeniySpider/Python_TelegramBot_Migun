@@ -89,18 +89,15 @@ class CalendarRepository:
         column_name: str,  # Сюда передаем строго строку "id" или "event_date"
         # Сюда передаем конкретный int (ID) или datetime.date
         value: int | datetime.datetime,
-        user_id: int | None = None
+        user_id: int
     ):
         # Валидация для защиты от SQL-инъекций (перфекционизм и безопасность!)
         if column_name not in ("id", "event_date"):
             raise ValueError(f"Недопустимое имя столбца для удаления: {column_name}")
 
-        if column_name == 'event_date' and user_id is not None:
-            query = "DELETE FROM events WHERE event_date = $1 AND user_id = $2;"
-            result = await conn.execute(query, value, user_id)
-        else:
-            query = f"DELETE FROM events WHERE {column_name} = $1;"
-            result = await conn.execute(query, value)
+        query = f"DELETE FROM events WHERE {column_name} = $1 AND user_id = $2;"
+        result = await conn.execute(query, value, user_id)
+
         # Извлечение числа с помощью split
         # "DELETE 5".split() -> ["DELETE", "5"] -> int("5") = 5
         return int(result.split()[-1])

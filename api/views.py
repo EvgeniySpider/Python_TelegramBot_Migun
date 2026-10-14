@@ -123,6 +123,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
                 # Находим и удаляем локальную копию в календаре ребенка
                 Event.objects.filter(
                     user_id=invitee_id,
+                    title=f"Встреча: {instance.title}",
                     event_date=instance.event_date,
                     start_time=instance.start_time,
                     end_time=instance.end_time,

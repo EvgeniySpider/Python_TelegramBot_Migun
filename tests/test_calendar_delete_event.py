@@ -211,7 +211,7 @@ async def test_del_event_on_info(mock_delete_events_by_filter: AsyncMock):
 
     await del_event_on_info(context_mock, update_mock, "id", 999)
 
-    mock_delete_events_by_filter.assert_awaited_once_with(mock_conn, "id", 999)
+    mock_delete_events_by_filter.assert_awaited_once_with(mock_conn, "id", 999, update_mock.effective_user.id)
 
     context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
         "events_deleted", amount=1
@@ -224,20 +224,20 @@ async def test_del_event_on_info(mock_delete_events_by_filter: AsyncMock):
 # --- ПОЗИТИВНЫЕ СЦЕНАРИИ ---
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "column_name, db_response, expected_count",
+    "column_name, db_response, expected_count, user_id",
     [
-        ("id", "DELETE 1", 1),
-        ("event_date", "DELETE 5", 5),
+        ("id", "DELETE 1", 1, 12345),
+        ("event_date", "DELETE 5", 5, 54321),
     ],
 )
 async def test_delete_events_by_filter_positive(
-    column_name: str, db_response: str, expected_count: int
+    column_name: str, db_response: str, expected_count: int, user_id: int
 ):
     mock_con = AsyncMock()
     # Мокаем ответ от базы данных (например, "DELETE 1")
     mock_con.execute = AsyncMock(return_value=db_response)
 
-    result = await CalendarRepository.delete_events_by_filter(mock_con, column_name, 999)
+    result = await CalendarRepository.delete_events_by_filter(mock_con, column_name, 999, user_id)
 
     # Проверяем, что метод вернул правильное число
     assert result == expected_count
@@ -246,6 +246,8 @@ async def test_delete_events_by_filter_positive(
     assert column_name in mock_con.execute.call_args.args[0]
     # Проверяем, что значение подставилось правильно
     assert mock_con.execute.call_args.args[1] == 999
+    # Проверяем переданный в запрос user_id
+    assert mock_con.execute.call_args.args[2] == user_id
 
 
 # --- НЕГАТИВНЫЙ СЦЕНАРИЙ (ПРОВЕРКА ИСКЛЮЧЕНИЯ) ---
@@ -256,7 +258,7 @@ async def test_delete_events_by_filter_raises_value_error():
 
     # Оборачиваем вызов в контекстный менеджер pytest.raises
     with pytest.raises(ValueError) as exc_info:
-        await CalendarRepository.delete_events_by_filter(mock_con, bad_column, 999)
+        await CalendarRepository.delete_events_by_filter(mock_con, bad_column, 999, 12345)
 
     # exc_info.value содержит сам объект перехваченной ошибки
     assert str(exc_info.value) == f"Недопустимое имя столбца для удаления: {bad_column}"

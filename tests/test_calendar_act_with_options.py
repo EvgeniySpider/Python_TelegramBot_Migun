@@ -23,6 +23,7 @@ from app.handlers.states import (
     TYPING_INVITE_NUM,
     TYPING_INVITEE_ID,
 )
+from events.models import Appointment
 
 
 @pytest.mark.asyncio
@@ -177,7 +178,7 @@ async def test_handle_options_click_edit_one_event_is_organizer(
     assert result == CHOOSING_ACTION
 
     # Убеждаемся, что фильтрация в ORM произошла по правильному ID события
-    mock_appointment.objects.filter.assert_called_once_with(event=102)
+    mock_appointment.objects.filter.assert_called_once_with(event=102, status=mock_appointment.Status.CONFIRMED)
     aexists_mock.assert_awaited_once()
 
     update_mock.callback_query.answer.assert_awaited_once()

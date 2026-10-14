@@ -123,9 +123,14 @@ async def _refresh_day_menu_after_edit(update: Update, context: ContextTypes.DEF
 
     # Перезапрашиваем свежие данные из базы, чтобы ОЗУ бота синхронизировалось с изменениями
     async with context.application.database.connection() as conn:
+        # 1. Обновляем список событий дня
         updated_records = await CalendarRepository.get_events_by_date(conn, user_id, selected_date)
-
+        # 2. Пересчитываем занятость дней месяца (актуализируем статус full/partial)
+        busy_days = await CalendarService.get_user_busy_days(
+            conn=conn, user_id=user_id, year=selected_date.year, month=selected_date.month
+        )
     context.user_data["event_text_record"] = updated_records
+    context.user_data["month_busy_days"] = busy_days
     event_count = len(updated_records)
     # Рендерим меню дня заново
     cards = [

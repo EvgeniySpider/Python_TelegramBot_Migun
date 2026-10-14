@@ -698,9 +698,13 @@ async def test_handle_edit_date_selection_time_conflict(mock_has_time_conflict: 
 @pytest.mark.asyncio
 @patch("app.handlers.calendar_edit_flow.handle_options_with_exist_notes_in_day")
 @patch("app.handlers.calendar_edit_flow.build_detailed_event_text")
+@patch("app.handlers.calendar_edit_flow.CalendarService.get_user_busy_days")
 @patch("app.handlers.calendar_edit_flow.CalendarRepository.get_events_by_date")
 async def test_refresh_day_menu_after_edit(
-    mock_get_events: AsyncMock, mock_build_card: MagicMock, mock_handle_options: AsyncMock
+    mock_get_events: AsyncMock,
+    mock_get_busy_days: AsyncMock,
+    mock_build_card: MagicMock,
+    mock_handle_options: AsyncMock,
 ):
     # 1. Подготовка данных
     update_mock, context_mock = MagicMock(), MagicMock()
@@ -716,9 +720,10 @@ async def test_refresh_day_menu_after_edit(
     mock_conn = AsyncMock()
     context_mock.application.database.connection.return_value.__aenter__.return_value = mock_conn
 
-    # Имитируем 2 записи в базе
+    # Имитируем 2 записи в базе и кэш занятости
     mock_records = [{"id": 1}, {"id": 2}]
     mock_get_events.return_value = mock_records
+    mock_get_busy_days.return_value = {20: "partial"}
     mock_build_card.side_effect = lambda records, index, numbered: f"Card {index}"
     mock_handle_options.return_value = CHOOSING_ACTION
 
@@ -730,7 +735,11 @@ async def test_refresh_day_menu_after_edit(
 
     # Проверка синхронизации с базой и обновления ОЗУ
     mock_get_events.assert_awaited_once_with(mock_conn, 123, test_date)
+    mock_get_busy_days.assert_awaited_once_with(
+        conn=mock_conn, user_id=123, year=test_date.year, month=test_date.month
+    )
     assert context_mock.user_data["event_text_record"] == mock_records
+    assert context_mock.user_data["month_busy_days"] == {20: "partial"}
 
     # Проверка, что статус успеха извлечен и удален из user_data
     assert "edit_success_status" not in context_mock.user_data

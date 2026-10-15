@@ -310,7 +310,7 @@ async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DE
 
     source = update.callback_query if update.callback_query else update
     date = context.user_data["selected_date"]
-    header = context.user_data.get("edit_success_status", "")
+    header = context.user_data.pop("edit_success_status", "")
 
     return await handle_options_with_exist_notes_in_day(
         events_text, (source, date.day, date.month, date.year), header=header

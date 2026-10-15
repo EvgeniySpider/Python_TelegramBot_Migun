@@ -45,7 +45,7 @@ async def handle_invite_event_by_text_number(
     event_title = escape_markdown(event_text_record[index_record]["title"], version=1)
 
     text = (
-        f"Выбрано событие: *{event_title}*\n\n"
+        f"*Выбрано событие:* {event_title}\n\n"
         "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
     )
 
@@ -170,8 +170,8 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
 
         invite_text = (
             f"🔔 *Новое приглашение!*\n\n"
-            f"*{safe_inviter}* приглашает вас на событие:\n"
-            f"📌 *{safe_title}*\n"
+            f"{safe_inviter} приглашает вас на событие:\n"
+            f"📌 {safe_title}\n"
             f"📅 Дата: {date_str}\n"
             f"⏰ Время: {time_str}\n"
         )
@@ -274,7 +274,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         try:
             await context.bot.send_message(
                 chat_id=inviter_id,
-                text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{safe_title}*.",
+                text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие {safe_title}.",
                 parse_mode="Markdown",
             )
         except TelegramError as e:
@@ -293,7 +293,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         try:
             await context.bot.send_message(
                 chat_id=inviter_id,
-                text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{safe_title}*.",
+                text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие {safe_title}.",
                 parse_mode="Markdown",
             )
         except TelegramError as e:
@@ -343,7 +343,7 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
 
             safe_title = escape_markdown(event.title, version=1)
             text_my += (
-                f"*{i}. {safe_title}*\n"
+                f"*{i}*. {safe_title}\n"
                 f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
                 f"👤 Приглашенный: ID {meeting.invitee_id}\n"
                 f"📊 Статус: {status}\n\n"
@@ -369,7 +369,7 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
 
             safe_title = escape_markdown(event.title, version=1)
             text_others += (
-                f"*{i}. {safe_title}*\n"
+                f"*{i}*. {safe_title}\n"
                 f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
                 f"👑 Организатор: ID {event.user_id}\n"
                 f"📊 Статус: {status}\n\n"

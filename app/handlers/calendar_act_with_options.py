@@ -167,7 +167,7 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
             event_title = event_text_record[0]["title"]
             safe_title = escape_markdown(event_title, version=1)
             text = (
-                f"Выбрано событие: *{safe_title}*\n\n"
+                f"*Выбрано событие:* {safe_title}\n\n"
                 "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
             )
 

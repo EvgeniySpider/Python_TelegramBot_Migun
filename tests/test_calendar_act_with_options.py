@@ -549,9 +549,15 @@ async def test_handle_options_click_delete_too_many_events_text_input():
 
 
 @pytest.mark.asyncio
-async def test_handle_options_click_invite_one_event():
+@patch("app.handlers.calendar_act_with_options.is_user_invitee_for_event")
+async def test_handle_options_click_invite_one_event(mock_is_invitee: AsyncMock):
+    # 1. Задаем, что юзер НЕ ребенок (организатор встречи)
+    mock_is_invitee.return_value = False
+
     update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_invite"
+    # 2. Задаем реальный числовой ID вместо мок-корутины
+    update_mock.effective_user.id = 12345
 
     context_mock.user_data = {
         "selected_date": date(2026, 10, 20),
@@ -566,17 +572,28 @@ async def test_handle_options_click_invite_one_event():
         ],
     }
 
+    # ВЫЗОВ
     result: int = await handle_options_click(update_mock, context_mock)
 
+    # ПРОВЕРКИ
     assert result == TYPING_INVITEE_ID
+
+    # Проверяем, что валидация прав была вызвана с корректными параметрами
+    mock_is_invitee.assert_called_once_with(
+        user_id=12345,
+        selected_date=date(2026, 10, 20),
+        start_time=time(10, 0),
+        end_time=time(11, 0),
+    )
 
     update_mock.callback_query.edit_message_text.assert_awaited_once()
     assert context_mock.user_data["invite_event_id"] == 301
 
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
 
-    assert "Выбрано событие: **Одиночная встреча**" in kwargs["text"]
-    assert "**отправьте Telegram ID** пользователя, которого хотите пригласить:" in kwargs["text"]
+    # 3. Проверяем актуальный формат текста с 1 звёздочкой и иконкой
+    assert "*Выбрано событие:* Одиночная встреча" in kwargs["text"]
+    assert "*отправьте Telegram ID* пользователя, которого хотите пригласить:" in kwargs["text"]
 
     keyboard = kwargs["reply_markup"].inline_keyboard
 

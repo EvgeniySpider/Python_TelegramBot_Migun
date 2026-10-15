@@ -160,8 +160,26 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
     elif query.data == "action_invite":
         # ---- СЦЕНАРИЙ 1: Всего одна заметка в дне ----
         if event_count == 1:
+            event_rec = event_text_record[0]
+            selected_date = context.user_data.get("selected_date")
+            user_id = update.effective_user.id
+
+            # Проверяем: если юзер сам гость на этой встрече — запрещаем звать других
+            is_invitee = await is_user_invitee_for_event(
+                user_id=user_id,
+                selected_date=selected_date,
+                start_time=event_rec["start_time"],
+                end_time=event_rec["end_time"],
+            )
+            if is_invitee:
+                await query.answer(
+                    "❌ Приглашать участников может только организатор встречи.",
+                    show_alert=False,
+                )
+                return CHOOSING_ACTION
+
             # Фиксируем в ОЗУ ID события, на которое будем приглашать
-            context.user_data["invite_event_id"] = event_text_record[0]["id"]
+            context.user_data["invite_event_id"] = event_rec["id"]
 
             # Вытаскиваем название для красивого отображения
             event_title = event_text_record[0]["title"]

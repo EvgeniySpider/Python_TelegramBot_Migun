@@ -14,12 +14,11 @@ from app.handlers.calendar_keyboard import (
     generate_confirm_invite_keyboard,
 )
 from app.handlers.commands import calendar_command
-from app.handlers.states import TYPING_INVITE_NUM, TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
-from app.handlers.utils import get_validated_event_index, validate_telegram_id_input
+from app.handlers.states import SELECTING_INVITE_EVENT, TYPING_INVITE_NUM, TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
+from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event, validate_telegram_id_input
 from events.models import Appointment, Event, User
 
 logger = logging.getLogger(__name__)
-
 
 async def handle_invite_event_by_text_number(
     update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -32,7 +31,6 @@ async def handle_invite_event_by_text_number(
 
     Возвращает стейт TYPING_INVITEE_ID при успехе, либо стейт повторного ввода при ошибке.
     """
-    # Одной строкой извлекаем и статус, и индекс, и сам массив событий
     is_valid, result, event_text_record = await get_validated_event_index(
         update, context, TYPING_INVITE_NUM
     )
@@ -40,12 +38,30 @@ async def handle_invite_event_by_text_number(
     if not is_valid:
         return result
     index_record = result
+    event_rec = event_text_record[index_record]
+    selected_date = context.user_data.get("selected_date")
+    user_id = update.effective_user.id
 
-    context.user_data["invite_event_id"] = event_text_record[index_record]["id"]
-    event_title = escape_markdown(event_text_record[index_record]["title"], version=1)
+    # Защита: проверяем, не является ли юзер гостем на этой встрече
+    is_invitee = await is_user_invitee_for_event(
+        user_id=user_id,
+        selected_date=selected_date,
+        start_time=event_rec.get("start_time"),
+        end_time=event_rec.get("end_time"),
+    )
+    if is_invitee:
+        await update.message.reply_text(
+            "❌ Приглашать участников может только организатор встречи.\n\n"
+            "Пожалуйста, отправьте номер другого события для назначения встречи:"
+        )
+        return TYPING_INVITE_NUM
+
+    context.user_data["invite_event_id"] = event_rec["id"]
+    event_title = event_rec["title"]
+    safe_title = escape_markdown(event_title, version=1)
 
     text = (
-        f"*Выбрано событие:* {event_title}\n\n"
+        f"📌 *Выбрано событие*: {safe_title}\n\n"
         "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
     )
 
@@ -64,18 +80,37 @@ async def handle_invite_event_selection(update: Update, context: ContextTypes.DE
     Возвращает стейт TYPING_INVITEE_ID.
     """
     query = update.callback_query
-    await query.answer()
 
     raw_click_data: str = str(query.data)
     index_record: int = int(raw_click_data.split(":")[-1])
 
-    event_text_record = context.user_data.get("event_text_record")
+    event_text_record = context.user_data.get("event_text_record", [])
+    event_rec = event_text_record[index_record]
+    selected_date = context.user_data.get("selected_date")
+    user_id = update.effective_user.id
 
-    context.user_data["invite_event_id"] = event_text_record[index_record]["id"]
-    event_title = event_text_record[index_record]["title"]
+    # Защита: проверяем, не является ли юзер гостем на этой встрече
+    is_invitee = await is_user_invitee_for_event(
+        user_id=user_id,
+        selected_date=selected_date,
+        start_time=event_rec.get("start_time"),
+        end_time=event_rec.get("end_time"),
+    )
+    if is_invitee:
+        await query.answer(
+            "❌ Приглашать участников может только организатор встречи. Выберите другое событие.",
+            show_alert=False,
+        )
+        return SELECTING_INVITE_EVENT
+
+    await query.answer()
+
+    context.user_data["invite_event_id"] = event_rec["id"]
+    event_title = event_rec["title"]
+    safe_title = escape_markdown(event_title, version=1)
 
     text = (
-        f"Выбрано событие: *{event_title}*\n\n"
+        f"📌 *Выбрано событие*: {safe_title}\n\n"
         "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
     )
 

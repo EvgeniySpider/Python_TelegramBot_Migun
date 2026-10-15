@@ -194,6 +194,7 @@ async def test_notify_and_cancel_appointments_no_roles(mock_Appointment, mock_Ev
     # Мокаем удаляемое событие
     mock_event = MagicMock()
     mock_event.id = 10
+    mock_event.title = 'Название события'
     mock_event.event_date = date(2026, 10, 20)
     mock_event.start_time = time(10, 0)
     mock_event.end_time = time(11, 0)
@@ -289,6 +290,7 @@ async def test_notify_and_cancel_appointments_as_child(mock_Appointment, mock_Ev
     # Локальная заметка ребенка
     mock_event = MagicMock()
     mock_event.id = 10
+    mock_event.title = 'Название события'
     mock_event.event_date = date(2026, 10, 20)
     mock_event.start_time = None  # Проверим как отрабатывает "Весь день"
 

@@ -126,7 +126,7 @@ async def test_handle_delete_all_events(mock_confirm_to_delete: AsyncMock):
 
     assert "*АБСОЛЮТНО ВСЕ* мероприятия на этот день?" in delete_text[0]
     assert (
-        "**все существующие заметки** на эту дату! Восстановление будет невозможно"
+        "*все существующие заметки* на эту дату! Восстановление будет невозможно"
         in delete_text[1]
     )
 

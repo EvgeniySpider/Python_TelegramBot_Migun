@@ -134,7 +134,7 @@ async def handle_delete_choice(update: Update, context: ContextTypes.DEFAULT_TYP
         # 3. Задаем динамический текст склонений для нашего универсального confirm_to_delete
         delete_text = (
             "⚠️ *АБСОЛЮТНО ВСЕ* мероприятия на этот день?",
-            "**все существующие заметки** на эту дату! Восстановление будет невозможно.",
+            "*все существующие заметки* на эту дату! Восстановление будет невозможно.",
         )
 
         state = await confirm_to_delete(query, events_preview, delete_text)

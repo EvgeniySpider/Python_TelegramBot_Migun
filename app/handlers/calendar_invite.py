@@ -4,6 +4,7 @@ from django.db.models import Q
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram.helpers import escape_markdown
 
 from app.core.calendar.services import check_user_availability
 from app.core.calendar.utils import build_detailed_event_text
@@ -41,7 +42,7 @@ async def handle_invite_event_by_text_number(
     index_record = result
 
     context.user_data["invite_event_id"] = event_text_record[index_record]["id"]
-    event_title = event_text_record[index_record]["title"]
+    event_title = escape_markdown(event_text_record[index_record]["title"], version=1)
 
     text = (
         f"Выбрано событие: *{event_title}*\n\n"
@@ -164,16 +165,20 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         else:
             time_str = "Весь день"
 
+        safe_title = escape_markdown(target_event.title, version=1)
+        safe_inviter = escape_markdown(inviter_name, version=1)
+
         invite_text = (
             f"🔔 *Новое приглашение!*\n\n"
-            f"*{inviter_name}* приглашает вас на событие:\n"
-            f"📌 *{target_event.title}*\n"
+            f"*{safe_inviter}* приглашает вас на событие:\n"
+            f"📌 *{safe_title}*\n"
             f"📅 Дата: {date_str}\n"
             f"⏰ Время: {time_str}\n"
         )
 
         if target_event.description:
-            invite_text += f"📖 Описание: {target_event.description}\n"
+            safe_desc = escape_markdown(target_event.description, version=1)
+            invite_text += f"📖 Описание: {safe_desc}\n"
 
         invite_text += "\nПримете приглашение?"
 
@@ -229,6 +234,9 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
     inviter_id = appointment.event.user_id
     original_event = appointment.event
 
+    # Экранируем название события для безопасного вывода в Markdown
+    safe_title = escape_markdown(original_event.title, version=1)
+
     if action == "accept":
         # 1. Повторная валидация времени гостя
         is_busy = await check_user_availability(query.from_user.id, appointment.event)
@@ -258,15 +266,15 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             end_time=original_event.end_time,
         )
 
-        # 4. Меняем сообщение у гостя
-        success_text = f"✅ Вы *приняли* приглашение на событие: {original_event.title}"
+        # 4. Меняем сообщение у гостя (безопасный safe_title)
+        success_text = f"✅ Вы *приняли* приглашение на событие: {safe_title}"
         await query.edit_message_text(text=success_text, parse_mode="Markdown")
 
-        # 5. Уведомляем организатора (inviter) о решении гостя (invitee)
+        # 5. Уведомляем организатора (inviter) о решении гостя (безопасный safe_title)
         try:
             await context.bot.send_message(
                 chat_id=inviter_id,
-                text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{original_event.title}*.",
+                text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие *{safe_title}*.",
                 parse_mode="Markdown",
             )
         except TelegramError as e:
@@ -277,14 +285,15 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             )
 
     elif action == "reject":
-        reject_text = f"❌ Вы *отказались* от приглашения на событие: {original_event.title}"
+        # Безопасный safe_title при отказе
+        reject_text = f"❌ Вы *отказались* от приглашения на событие: {safe_title}"
         await query.edit_message_text(text=reject_text, parse_mode="Markdown")
 
-        # Уведомляем организатора (inviter) об отказе гостя (invitee)
+        # Уведомляем организатора (inviter) об отказе гостя (безопасный safe_title)
         try:
             await context.bot.send_message(
                 chat_id=inviter_id,
-                text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{original_event.title}*.",
+                text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие *{safe_title}*.",
                 parse_mode="Markdown",
             )
         except TelegramError as e:
@@ -332,8 +341,9 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
 
             status = meeting.get_status_display()
 
+            safe_title = escape_markdown(event.title, version=1)
             text_my += (
-                f"*{i}. {event.title}*\n"
+                f"*{i}. {safe_title}*\n"
                 f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
                 f"👤 Приглашенный: ID {meeting.invitee_id}\n"
                 f"📊 Статус: {status}\n\n"
@@ -357,8 +367,9 @@ async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYP
 
             status = meeting.get_status_display()
 
+            safe_title = escape_markdown(event.title, version=1)
             text_others += (
-                f"*{i}. {event.title}*\n"
+                f"*{i}. {safe_title}*\n"
                 f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
                 f"👑 Организатор: ID {event.user_id}\n"
                 f"📊 Статус: {status}\n\n"

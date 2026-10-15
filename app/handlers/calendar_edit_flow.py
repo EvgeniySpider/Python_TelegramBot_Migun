@@ -342,7 +342,7 @@ async def handle_edit_field_date(update: Update, context: ContextTypes.DEFAULT_T
     )
     # 4. ВЫПОЛНЯЕМ ВСЕГО ОДИН ОПРЯТНЫЙ РЕДАКТ ЭКРАНА
     await query.edit_message_text(
-        text="📅 **Изменение даты события**\n\n"
+        text="📅 *Изменение даты события*\n\n"
         f"Изменяемая дата: {day:02d}.{month:02d}.{year}\n"
         "Выберите на календаре ниже новую дату для этого мероприятия:",
         reply_markup=calendar_markup,

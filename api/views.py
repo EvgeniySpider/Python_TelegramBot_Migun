@@ -4,6 +4,7 @@ import threading
 import requests
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
+from telegram.helpers import escape_markdown
 
 from app.main import settings
 from events.models import Appointment, Event
@@ -119,6 +120,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         if hosted_appointments.exists():
             for appt in hosted_appointments:
                 invitee_id = appt.invitee_id
+                safe_title = escape_markdown(instance.title, version=1)
 
                 # Находим и удаляем локальную копию в календаре ребенка
                 Event.objects.filter(
@@ -130,11 +132,11 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
                 # Удаляем саму запись о встрече
                 appt.delete()
-
+                
                 msg = (
                     f"❌ *Отмена встречи*\n\n"
                     f"Организатор (ID: `{user.telegram_id}`) отменил мероприятие:\n"
-                    f"📌 *Событие*: {instance.title}\n"
+                    f"📌 *Событие*: {safe_title}\n"
                     f"📅 *Дата*: {date_str}\n"
                     f"⏰ *Время*: {time_str}"
                 )
@@ -159,10 +161,11 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
             if appt_as_invitee and appt_as_invitee.status != Appointment.Status.CANCELLED:
                 organizer_id = appt_as_invitee.event.user_id
+                safe_parent_title = escape_markdown(appt_as_invitee.event.title, version=1)
                 msg = (
                     f"❌ *Отмена участия*\n\n"
                     f"Пользователь (ID: `{user.telegram_id}`) отменил свое участие:\n"
-                    f"📌 *Событие*: {appt_as_invitee.event.title}\n"
+                    f"📌 *Событие*: {safe_parent_title}\n"
                     f"📅 *Дата*: {date_str}\n"
                     f"⏰ *Время*: {time_str}"
                 )

@@ -5,6 +5,7 @@ from typing import Any
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes, ExtBot
+from telegram.helpers import escape_markdown
 
 from events.models import Appointment, Event
 
@@ -91,6 +92,7 @@ async def notify_and_cancel_appointments(
         # ==========================================
         # Ищем все встречи, привязанные к этому конкретному событию
         hosted_appointments = Appointment.objects.filter(event_id=local_event.id, status=Appointment.Status.CONFIRMED)
+        safe_organizer_title = escape_markdown(local_event.title, version=1)
 
         # Если такие есть, значит мы удаляем оригинал
         async for appt in hosted_appointments:
@@ -111,7 +113,7 @@ async def notify_and_cancel_appointments(
             msg = (
                 f"❌ *Отмена встречи*\n\n"
                 f"Организатор (ID: `{user_id}`) отменил мероприятие:\n"
-                f"📌 *Событие*: {local_event.title}\n"
+                f"📌 *Событие*: {safe_organizer_title}\n"
                 f"📅 *Дата*: {date_str}\n"
                 f"⏰ *Время*: {time_str}"
             )
@@ -137,10 +139,12 @@ async def notify_and_cancel_appointments(
 
         if appt_as_invitee and appt_as_invitee.status != Appointment.Status.CANCELLED:
             organizer_id = appt_as_invitee.event.user_id
+            safe_invitee_title = escape_markdown(appt_as_invitee.event.title, version=1)
+
             msg = (
                 f"❌ *Отмена участия*\n\n"
                 f"Пользователь (ID: `{user_id}`) отменил свое участие:\n"
-                f"📌 *Событие*: {appt_as_invitee.event.title}\n"
+                f"📌 *Событие*: {safe_invitee_title}\n"
                 f"📅 *Дата*: {date_str}\n"
                 f"⏰ *Время*: {time_str}"
             )

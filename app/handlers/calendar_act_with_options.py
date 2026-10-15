@@ -1,5 +1,6 @@
 from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram.helpers import escape_markdown
 
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_callbacks import (
@@ -164,10 +165,10 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
 
             # Вытаскиваем название для красивого отображения
             event_title = event_text_record[0]["title"]
-
+            safe_title = escape_markdown(event_title, version=1)
             text = (
-                f"Выбрано событие: **{event_title}**\n\n"
-                "Пожалуйста, **отправьте Telegram ID** пользователя, которого хотите пригласить:"
+                f"Выбрано событие: *{safe_title}*\n\n"
+                "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
             )
 
             await query.edit_message_text(

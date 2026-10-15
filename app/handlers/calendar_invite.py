@@ -191,7 +191,10 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
 
     if target_event.description:
         safe_desc = escape_markdown(target_event.description, version=1)
-        invite_text += f"📖 Описание: {safe_desc}\n"
+        if "\n" in safe_desc:
+            invite_text += f"📖 Описание:\n{safe_desc}\n"
+        else:
+            invite_text += f"📖 Описание: {safe_desc}\n"
 
     invite_text += "\nПримете приглашение?"
 

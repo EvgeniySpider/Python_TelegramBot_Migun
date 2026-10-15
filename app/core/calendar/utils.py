@@ -65,7 +65,15 @@ def build_detailed_event_text(
     safe_title = escape_markdown(str(raw_title), version=1)
 
     raw_desc = el.get("description")
-    safe_desc = escape_markdown(str(raw_desc), version=1) if raw_desc else "Не указано"
+    if raw_desc:
+        safe_desc = escape_markdown(str(raw_desc), version=1)
+        # Если описание многострочное — сносим на новую строку и даём отступ снизу
+        if "\n" in safe_desc:
+            desc_block = f"📖 *Описание*:\n{safe_desc}\n"
+        else:
+            desc_block = f"📖 *Описание*: {safe_desc}"
+    else:
+        desc_block = "📖 *Описание*: Не указано"
 
     # Обработка флага публичности
     is_public = el.get("is_public", False)
@@ -79,7 +87,7 @@ def build_detailed_event_text(
         header,
         f"📌 *Название*: {safe_title}",
         f"⏳ *Время*: {time_str}",
-        f"📖 *Описание*: {safe_desc}",
+        desc_block,
         f"🛡 *Доступ*: {status_str}\n",
     ]
 

@@ -284,7 +284,8 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
     if description:
-        report_text += f"📝 Описание: {description}\n\n"
+        report_text += f"📝 Описание: {description}\n"
+    report_text += "\n"
 
     context.user_data["edit_success_status"] = report_text
 

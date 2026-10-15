@@ -3,6 +3,7 @@ import datetime
 import asyncpg
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram.error import BadRequest
 
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.services import CalendarService
@@ -87,13 +88,23 @@ async def handle_options_with_exist_notes_in_day(
         "reply_markup": generate_options_keyboard(),
         "parse_mode": "Markdown",
     }
-
-    # Если source имеет метод edit_message_text — значит это CallbackQuery (гасим часики и правим на лету)
-    if hasattr(source, "edit_message_text"):
-        await source.edit_message_text(**kwargs)
-    else:
-        # Если это Update от MessageHandler — отправляем новым текстовым ответом в чат
-        await source.message.reply_text(**kwargs)
+    try:
+        # Если source имеет метод edit_message_text — значит это CallbackQuery (гасим часики и правим на лету)
+        if hasattr(source, "edit_message_text"):
+            await source.edit_message_text(**kwargs)
+        else:
+            # Если это Update от MessageHandler — отправляем новым текстовым ответом в чат
+            await source.message.reply_text(**kwargs)
+    except BadRequest as e:
+        # 🛡 Страховка: если Telegram всё равно ругается на разметку, отправляем без Markdown
+        if "can't parse entities" in str(e).lower():
+            kwargs.pop("parse_mode", None)
+            if hasattr(source, "edit_message_text"):
+                await source.edit_message_text(**kwargs)
+            else:
+                await source.message.reply_text(**kwargs)
+        else:
+            raise
 
     return CHOOSING_ACTION
 

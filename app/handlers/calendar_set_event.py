@@ -4,6 +4,7 @@ from datetime import datetime, time, timedelta
 from django.utils import timezone
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.helpers import escape_markdown
 
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.utils import build_events_list_text, format_event_time, normalize_time_str
@@ -276,15 +277,19 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         duration_text = format_event_time(start_time, end_time)
 
+    safe_title = escape_markdown(event_title, version=1)
+
     report_text = (
         f"*🎉 Мероприятие успешно добавлено!*\n"
         f"📅 Дата: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n"
-        f"📌 Событие: {event_title}\n"
+        f"📌 Событие: {safe_title}\n"
         f"⏰ Время: {duration_text}\n"
     )
 
     if description:
-        report_text += f"📝 Описание: {description}\n"
+        safe_desc = escape_markdown(description, version=1)
+        report_text += f"📝 Описание: {safe_desc}\n"
+
     report_text += "\n"
 
     context.user_data["edit_success_status"] = report_text

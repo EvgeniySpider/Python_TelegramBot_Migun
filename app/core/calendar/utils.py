@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from datetime import time
 
 from asyncpg import Record
+from telegram.helpers import escape_markdown
 
 
 def format_event_time(start_time: time, end_time: time) -> str:
@@ -19,24 +20,22 @@ def build_events_list_text(events: list[Record | dict], numbered: bool = False) 
     """
     raw_lines = []
     for i, el in enumerate(events):
-        # 1. Проверяем, является ли событие полнодневным
+        # Экранируем название от спецсимволов Markdown
+        safe_title = escape_markdown(str(el["title"]), version=1)
+
         if el["start_time"] is None or el.get("event_type") == "all_day":
             time_str = "(весь день)"
         else:
             time_str = format_event_time(el["start_time"], el["end_time"])
 
-        # 2. Формируем строку в зависимости от режима
         if numbered:
-            # Формат для удаления: [ 1 ]  • Весь день Тестовая задача №1
-            line = f"\\[ {i + 1} ]  • {time_str} {el['title']}"
+            line = f"\\[ {i + 1} ]  • {time_str} {safe_title}"
         else:
-            # Обычный формат главного меню: • Весь день Тестовая задача №1
             line = (
-                f"• {el['title']} {time_str}"
+                f"• {safe_title} {time_str}"
                 if time_str == "(весь день)"
-                else f"• {time_str} {el['title']}"
+                else f"• {time_str} {safe_title}"
             )
-
         raw_lines.append(line)
 
     return "Запланированные дела: \n" + "\n".join(raw_lines) + "\n\n"
@@ -62,7 +61,11 @@ def build_detailed_event_text(
         else format_event_time(el["start_time"], el["end_time"])
     )
 
-    desc_str = el.get("description") or "Не указано"
+    raw_title = el.get("title", "")
+    safe_title = escape_markdown(str(raw_title), version=1)
+
+    raw_desc = el.get("description")
+    safe_desc = escape_markdown(str(raw_desc), version=1) if raw_desc else "Не указано"
 
     # Обработка флага публичности
     is_public = el.get("is_public", False)
@@ -74,9 +77,9 @@ def build_detailed_event_text(
 
     card_lines = [
         header,
-        f"📌 *Название*: {el['title']}",
+        f"📌 *Название*: {safe_title}",
         f"⏳ *Время*: {time_str}",
-        f"📖 *Описание*: {desc_str}",
+        f"📖 *Описание*: {safe_desc}",
         f"🛡 *Доступ*: {status_str}\n",
     ]
 

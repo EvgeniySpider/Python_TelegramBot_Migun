@@ -69,7 +69,7 @@ def build_detailed_event_text(
         safe_desc = escape_markdown(str(raw_desc), version=1)
         # Если описание многострочное — сносим на новую строку и даём отступ снизу
         if "\n" in safe_desc:
-            desc_block = f"📖 *Описание*:\n{safe_desc}\n"
+            desc_block = f"📖 *Описание*:\n{safe_desc}"
         else:
             desc_block = f"📖 *Описание*: {safe_desc}"
     else:

@@ -269,7 +269,10 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
 
         guest_description = f"🤝 Встреча с пользователем {inviter_id}."
         if original_event.description:
-            guest_description += f"\nОригинальное описание: {original_event.description}"
+            if "\n" in original_event.description:
+                guest_description += f"\n📝 Оригинальное описание:\n{original_event.description}"
+            else:
+                guest_description += f"\n📝 Оригинальное описание: {original_event.description}"
 
         # 3. Создаем физическую копию для гостя
         await Event.objects.acreate(

@@ -125,7 +125,27 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
     # 2. Достаем целевое событие (событие организатора)
     target_event = await Event.objects.aget(id=event_id)
 
-    # 3. Валидация пересечения временных интервалов (свободен ли гость)
+    # 3. СНАЧАЛА проверяем: не связывались ли мы уже с этим пользователем по поводу этой встречи
+    existing_appointment = await Appointment.objects.filter(
+        event_id=target_event.id,
+        invitee_id=invitee_id,
+    ).afirst()
+
+    if existing_appointment:
+        if existing_appointment.status == Appointment.Status.CANCELLED:
+            msg = "❌ Этот пользователь ранее отклонил приглашение на данное событие."
+        elif existing_appointment.status == Appointment.Status.CONFIRMED:
+            msg = "✅ Этот пользователь уже принял приглашение и является участником этой встречи."
+        else:  # PENDING
+            msg = "⏳ Вы уже отправляли приглашение этому пользователю на данное событие (ожидает ответа)."
+
+        await update.message.reply_text(
+            msg,
+            reply_markup=generate_back_to_menu_button(),
+        )
+        return TYPING_INVITEE_ID
+
+    # 4. Если человек еще не приглашался — проверяем, свободен ли он по расписанию
     is_busy = await check_user_availability(invitee_id, target_event)
 
     if is_busy:
@@ -137,73 +157,66 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         )
         return TYPING_INVITEE_ID
 
-    # 4. Если свободен — создаем запись в таблице appointments
-    appointment, created = await Appointment.objects.aget_or_create(
+    # 5. Пользователь свободен — создаем встречу со статусом PENDING
+    appointment = await Appointment.objects.acreate(
         event_id=target_event.id,
         invitee_id=invitee_id,
-        defaults={"status": Appointment.Status.PENDING},
+        status=Appointment.Status.PENDING,
     )
 
-    if not created:
+    inviter_name = (
+        update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
+    )
+    date_str = (
+        target_event.event_date.strftime("%d.%m.%Y")
+        if hasattr(target_event.event_date, "strftime")
+        else str(target_event.event_date)
+    )
+
+    if target_event.start_time and target_event.end_time:
+        time_str = f"{target_event.start_time.strftime('%H:%M')} - {target_event.end_time.strftime('%H:%M')}"
+    else:
+        time_str = "Весь день"
+
+    safe_title = escape_markdown(target_event.title, version=1)
+    safe_inviter = escape_markdown(inviter_name, version=1)
+
+    invite_text = (
+        f"🔔 *Новое приглашение!*\n\n"
+        f"{safe_inviter} приглашает вас на событие:\n"
+        f"📌 {safe_title}\n"
+        f"📅 Дата: {date_str}\n"
+        f"⏰ Время: {time_str}\n"
+    )
+
+    if target_event.description:
+        safe_desc = escape_markdown(target_event.description, version=1)
+        invite_text += f"📖 Описание: {safe_desc}\n"
+
+    invite_text += "\nПримете приглашение?"
+
+    try:
+        # Организатор (inviter) отправляет приглашение гостю (invitee)
+        await context.bot.send_message(
+            chat_id=invitee_id,
+            text=invite_text,
+            reply_markup=generate_confirm_invite_keyboard(appointment.id),
+            parse_mode="Markdown",
+        )
+        # Отчитываемся организатору об успехе
         await update.message.reply_text(
-            "ℹ️ Вы уже отправляли приглашение этому пользователю на данное событие.",
+            f"✅ Приглашение успешно создано!\n"
+            f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
+            reply_markup=generate_back_to_menu_button(),
+            parse_mode="Markdown",
+        )
+    except TelegramError:
+        # Гость заблокировал бота
+        await update.message.reply_text(
+            "❗ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
             reply_markup=generate_back_to_menu_button(),
         )
-        return TYPING_INVITEE_ID
-    else:
-        inviter_name = (
-            update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
-        )
-        date_str = (
-            target_event.event_date.strftime("%d.%m.%Y")
-            if hasattr(target_event.event_date, "strftime")
-            else str(target_event.event_date)
-        )
-
-        if target_event.start_time and target_event.end_time:
-            time_str = f"{target_event.start_time.strftime('%H:%M')} - {target_event.end_time.strftime('%H:%M')}"
-        else:
-            time_str = "Весь день"
-
-        safe_title = escape_markdown(target_event.title, version=1)
-        safe_inviter = escape_markdown(inviter_name, version=1)
-
-        invite_text = (
-            f"🔔 *Новое приглашение!*\n\n"
-            f"{safe_inviter} приглашает вас на событие:\n"
-            f"📌 {safe_title}\n"
-            f"📅 Дата: {date_str}\n"
-            f"⏰ Время: {time_str}\n"
-        )
-
-        if target_event.description:
-            safe_desc = escape_markdown(target_event.description, version=1)
-            invite_text += f"📖 Описание: {safe_desc}\n"
-
-        invite_text += "\nПримете приглашение?"
-
-        try:
-            # Организатор (inviter) отправляет приглашение гостю (invitee)
-            await context.bot.send_message(
-                chat_id=invitee_id,
-                text=invite_text,
-                reply_markup=generate_confirm_invite_keyboard(appointment.id),
-                parse_mode="Markdown",
-            )
-            # Отчитываемся организатору об успехе
-            await update.message.reply_text(
-                f"✅ Приглашение успешно создано!\n"
-                f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
-                reply_markup=generate_back_to_menu_button(),
-                parse_mode="Markdown",
-            )
-        except TelegramError:
-            # Гость заблокировал бота
-            await update.message.reply_text(
-                "❗ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
-                reply_markup=generate_back_to_menu_button(),
-            )
-            await appointment.adelete()
+        await appointment.adelete()
 
     return TYPING_INVITEE_ID
 

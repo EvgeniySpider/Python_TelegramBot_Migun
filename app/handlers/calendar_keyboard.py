@@ -78,12 +78,14 @@ def generate_calendar_keyboard(
         # 3. ДОБАВЛЯЕМ РЯД В КЛАВИАТУРУ (сдвинули влево, теперь он срабатывает 1 раз на неделю!)
         keyboard.append(row)
 
-    keyboard.append(
-        [
-            InlineKeyboardButton(text="🤝 Встречи", callback_data="meetings"),
-            InlineKeyboardButton(text="🌐 Общие события", callback_data="public_events"),
-        ]
-    )
+    # Показываем эти кнопки ТОЛЬКО в обычном календаре, а при переносе даты скрываем
+    if not is_back_button:
+        keyboard.append(
+            [
+                InlineKeyboardButton(text="🤝 Встречи", callback_data="meetings"),
+                InlineKeyboardButton(text="🌐 Общие события", callback_data="public_events"),
+            ]
+        )
 
     # РЯД 9: Кнопки навигации (Стрелочки)
     # Вычисляем прошлый и следующий месяц для коллбэков стрелочек

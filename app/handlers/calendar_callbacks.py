@@ -154,10 +154,14 @@ async def handle_calendar_nav_click(update: Update, context: ContextTypes.DEFAUL
 
     # 4. Обновляем ОЗУ пользователя, чтобы валидация создания ивентов all_day работала корректно
     context.user_data["month_busy_days"] = busy_days
+    is_editing: bool = context.user_data.get("is_editing_date_mode", False)
 
     # 5. Генерируем новую конфигурацию кнопок (матрицу дней) под целевой месяц
     calendar_markup = generate_calendar_keyboard(
-        year=target_year, month=target_month, busy_days=busy_days
+        year=target_year,
+        month=target_month,
+        busy_days=busy_days,
+        is_back_button=is_editing
     )
 
     # 6. Обновляем исключительно инлайн-сетку кнопок под сообщением, избегая мерцания текста

@@ -279,9 +279,11 @@ async def test_handle_invitee_unexited_telegram_id(
 @patch("app.handlers.calendar_invite.check_user_availability")
 @patch("app.handlers.calendar_invite.Event")
 @patch("app.handlers.calendar_invite.User")
+@patch("app.handlers.calendar_invite.Appointment")
 @patch("app.handlers.calendar_invite.validate_telegram_id_input")
 async def test_handle_invitee_id_input_is_busy(
     mock_validate: MagicMock,
+    mock_Appointment: MagicMock,
     mock_User: MagicMock,
     mock_Event: MagicMock,
     mock_check_avail: AsyncMock,
@@ -290,6 +292,9 @@ async def test_handle_invitee_id_input_is_busy(
     mock_validate.return_value = (True, 987654321)
     mock_User.objects.filter.return_value.aexists = AsyncMock(return_value=True)
     mock_Event.objects.aget = AsyncMock(return_value=MagicMock())
+    
+    # Имитируем, что история пустая (пользователя еще не звали)
+    mock_Appointment.objects.filter.return_value.afirst = AsyncMock(return_value=None)
 
     # Симулируем, что пользователь занят в это время
     mock_check_avail.return_value = True
@@ -329,8 +334,11 @@ async def test_handle_invitee_id_input_already_invited(
     mock_Event.objects.aget = AsyncMock(return_value=MagicMock())
     mock_check_avail.return_value = False
 
-    # Симулируем, что запись уже есть в БД (created = False)
-    mock_Appointment.objects.aget_or_create = AsyncMock(return_value=(MagicMock(), False))
+    # Симулируем, что запись уже есть в БД (created = False) -> статус PENDING
+    existing_mock = MagicMock()
+    existing_mock.status = "pending"
+    mock_Appointment.Status.PENDING = "pending"
+    mock_Appointment.objects.filter.return_value.afirst = AsyncMock(return_value=existing_mock)
 
     update_mock, context_mock = MagicMock(), MagicMock()
     update_mock.message.reply_text = AsyncMock()
@@ -368,15 +376,21 @@ async def test_handle_invitee_id_input_telegram_error(
 
     target_event = MagicMock()
     target_event.start_time = None  # Чтобы не заморачиваться с форматом времени
+    target_event.title = 'Название события'
+    target_event.description = 'Описание события'
     mock_Event.objects.aget = AsyncMock(return_value=target_event)
     mock_check_avail.return_value = False
 
+    # Имитируем отсутствие старой записи (человек зовётся впервые)
+    mock_Appointment.objects.filter.return_value.afirst = AsyncMock(return_value=None)
+
     # Запись успешно создается (created = True)
     mock_appointment = AsyncMock()  # Делаем именно AsyncMock, чтобы проверить adelete()
-    mock_Appointment.objects.aget_or_create = AsyncMock(return_value=(mock_appointment, True))
+    mock_Appointment.objects.acreate = AsyncMock(return_value=mock_appointment)
 
     update_mock, context_mock = MagicMock(), MagicMock()
     update_mock.message.reply_text = AsyncMock()
+    update_mock.effective_user.first_name = 'Spider'
     context_mock.user_data = {"invite_event_id": 999}
 
     # Имитируем падение телеграма
@@ -406,10 +420,11 @@ class AsyncMockQuerySet:
 
 
 @pytest.mark.asyncio
+@patch("app.handlers.calendar_invite.escape_markdown")
 @patch("app.handlers.calendar_invite.generate_back_calendar_button")
 @patch("app.handlers.calendar_invite.Appointment")
 async def test_handle_show_meetings_as_host_and_guest(
-    mock_Appointment: MagicMock, mock_gen_button: MagicMock
+    mock_Appointment: MagicMock, mock_gen_button: MagicMock, mock_escape: MagicMock
 ):
     # 1. Подготовка данных пользователя
     my_telegram_id = 111111111
@@ -419,6 +434,8 @@ async def test_handle_show_meetings_as_host_and_guest(
     update_mock.callback_query.from_user.id = my_telegram_id
     update_mock.callback_query.edit_message_text = AsyncMock()
     mock_gen_button.return_value = "fake_back_button"
+    # Мокаем эскейп, чтобы не заморачиваться с изменениями title
+    mock_escape.side_effect = lambda text, **kwargs: text
 
     # --- Встреча 1: Я организатор ---
     event_host = MagicMock()
@@ -461,7 +478,7 @@ async def test_handle_show_meetings_as_host_and_guest(
 
     # Проверяем блок "Назначенные мною встречи"
     assert "*🤝 Назначенные мною встречи:*" in result_text
-    assert "*1. Созвон по проекту*" in result_text
+    assert "*1*. Созвон по проекту" in result_text
     assert "📅 Дата: 18.10.2026 | ⏰ Время: 14:00 - 15:00" in result_text
     assert f"👤 Приглашенный: ID {friend_telegram_id}" in result_text
     assert "📊 Статус: ✅ Подтверждено" in result_text
@@ -471,14 +488,13 @@ async def test_handle_show_meetings_as_host_and_guest(
 
     # Проверяем блок "Приглашения для меня"
     assert "*📩 Приглашения для меня:*" in result_text
-    assert "*1. Перекур*" in result_text
+    assert "*1*. Перекур" in result_text
     assert "📅 Дата: 21.10.2026 | ⏰ Время: 10:00 - 10:30" in result_text
     assert f"👑 Организатор: ID {friend_telegram_id}" in result_text
 
     # Проверяем параметры вызова Telegram API
     assert kwargs["parse_mode"] == "Markdown"
     assert kwargs["reply_markup"] == "fake_back_button"
-
 
 @pytest.mark.asyncio
 @patch("app.handlers.calendar_invite.generate_back_calendar_button")

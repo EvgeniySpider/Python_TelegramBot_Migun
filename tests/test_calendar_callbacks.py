@@ -1,4 +1,4 @@
-import datetime
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -44,7 +44,7 @@ async def test_handle_calendar_click_free_day(mock_generate_keyboard, mock_get_e
     )
 
     # Проверяем сохранение даты в ОЗУ
-    expected_date = datetime.date(2026, 10, 1)
+    expected_date = date(2026, 10, 1)
     assert context_mock.user_data["selected_date"] == expected_date
     assert context_mock.user_data["event_text_record"] == []
 
@@ -79,7 +79,7 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
             "end_time": None,
             "description": None,  # Триггерит 'Не указано'
             "is_public": True,  # Триггерит '👁 Публичное'
-            "event_date": datetime.date(2026, 10, 20),
+            "event_date": date(2026, 10, 20),
         }
     ]
 
@@ -112,7 +112,7 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
         "calendar_clicks"
     )
 
-    expected_date = datetime.date(2026, 10, 20)
+    expected_date = date(2026, 10, 20)
     assert context_mock.user_data["selected_date"] == expected_date
     assert context_mock.user_data["event_text_record"] == fake_event
     update_mock.callback_query.answer.assert_called_once()
@@ -132,10 +132,6 @@ async def test_handle_calendar_click_busy_day(mock_generate_keyboard, mock_get_e
     assert kwargs["reply_markup"] == "fake_options_keyboard"
 
     assert result == CHOOSING_ACTION
-
-
-# ---------------------------------------------------------------------------------------------------
-# ТУТ ВСЁ
 
 
 @pytest.mark.asyncio
@@ -223,3 +219,77 @@ async def test_handle_calendar_nav_click(
 
     # 10. Убеждаемся, что кнопки редактирования режима (🔙 Назад) тут НЕТ
     assert all(btn.callback_data != "back_to_edit_menu" for btn in all_buttons)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "nav_data, is_editing, expected_circle_text, expected_back_btn",
+    [
+        # 1. Перешли на тот же месяц (Октябрь) + режим редактирования -> кружок ДОЛЖЕН БЫТЬ (15)
+        ("calendar_nav:2026:10", True, "⚪ 15", True),
+        # 2. Ушли на другой месяц (Ноябрь) + режим редактирования -> кружка БЫТЬ НЕ ДОЛЖНО
+        ("calendar_nav:2026:11", True, None, True),
+        # 3. Тот же месяц (Октябрь), но обычный режим просмотра -> кружка БЫТЬ НЕ ДОЛЖНО
+        ("calendar_nav:2026:10", False, None, False),
+    ]
+)
+@patch('app.handlers.calendar_callbacks.CalendarService.get_user_busy_days')
+async def test_handle_calendar_nav_click_editing_day_restoration(
+    mock_get_busy_days: AsyncMock,
+    nav_data: str,
+    is_editing: bool,
+    expected_circle_text: str | None,
+    expected_back_btn: bool
+):
+    """
+    Проверяет логику восстановления индикатора выбранного дня (белого кружка)
+    при перелистывании месяцев календаря в режиме изменения даты.
+    """
+    update_mock, context_mock = AsyncMock(), MagicMock()
+    update_mock.callback_query.data = nav_data
+    update_mock.effective_user.id = 111
+    
+    # Мокаем БД
+    connection_mock = MagicMock()
+    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+
+    # В памяти лежит дата, с которой мы переносим событие: 15 октября 2026 года
+    context_mock.user_data = {
+        "selected_date": date(2026, 10, 15)  # 🎯 Используем правильный date
+    }
+    if is_editing:
+        context_mock.user_data["is_editing_date_mode"] = True
+        
+    mock_get_busy_days.return_value = {}
+    
+    # ВЫЗОВ ХЭНДЛЕРА
+    await handle_calendar_nav_click(update_mock, context_mock)
+    
+    #  ПРОВЕРЯЕМ РЕАЛЬНУЮ КЛАВИАТУРУ
+    update_mock.callback_query.edit_message_reply_markup.assert_awaited_once()
+    kwargs = update_mock.callback_query.edit_message_reply_markup.call_args.kwargs
+    markup: InlineKeyboardMarkup = kwargs["reply_markup"]
+    
+    # Собираем тексты всех кнопок в плоский список
+    all_buttons_text = [btn.text for row in markup.inline_keyboard for btn in row]
+
+    white_circle_index = 25
+
+    # Проверка белого кружка
+    if expected_circle_text:
+        assert expected_circle_text == all_buttons_text[white_circle_index]
+        
+    else:
+        assert "⚪ 15" not in all_buttons_text
+        
+    # Проверка кнопки "Назад" (на основе callback_data)
+    has_back_button = any(btn.callback_data == "back_to_edit_menu" for row in markup.inline_keyboard for btn in row)
+    assert has_back_button == expected_back_btn
+    
+    # В режиме редактирования кнопок "Встречи" и "Общие события" быть не должно
+    if expected_back_btn:
+        assert "🤝 Встречи" not in all_buttons_text
+        assert "🌐 Общие события" not in all_buttons_text
+    else:
+        assert "🤝 Встречи" in all_buttons_text
+        assert "🌐 Общие события" in all_buttons_text

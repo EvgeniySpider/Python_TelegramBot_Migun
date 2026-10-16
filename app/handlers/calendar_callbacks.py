@@ -155,14 +155,23 @@ async def handle_calendar_nav_click(update: Update, context: ContextTypes.DEFAUL
     # 4. Обновляем ОЗУ пользователя, чтобы валидация создания ивентов all_day работала корректно
     context.user_data["month_busy_days"] = busy_days
     is_editing: bool = context.user_data.get("is_editing_date_mode", False)
+    editing_day = None
 
-    # 5. Генерируем новую конфигурацию кнопок (матрицу дней) под целевой месяц
+    # 5. ВОССТАНАВЛИВАЕМ БЕЛЫЙ КРУЖОК ПРИ ВОЗВРАТЕ НА ИСХОДНЫЙ МЕСЯЦ
+    if is_editing and "selected_date" in context.user_data:
+        original_date = context.user_data["selected_date"]
+        # Если долистали обратно до того месяца и года, откуда переносим событие
+        if original_date.year == target_year and original_date.month == target_month:
+            editing_day = original_date.day
+
+    # 6. Генерируем новую конфигурацию кнопок (матрицу дней) под целевой месяц
     calendar_markup = generate_calendar_keyboard(
         year=target_year,
         month=target_month,
         busy_days=busy_days,
+        editing_day=editing_day,
         is_back_button=is_editing
     )
 
-    # 6. Обновляем исключительно инлайн-сетку кнопок под сообщением, избегая мерцания текста
+    # 7. Обновляем исключительно инлайн-сетку кнопок под сообщением, избегая мерцания текста
     await query.edit_message_reply_markup(reply_markup=calendar_markup)

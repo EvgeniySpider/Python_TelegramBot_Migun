@@ -27,6 +27,10 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not update.effective_chat or not update.effective_user:
         return ConversationHandler.END
 
+    context.user_data.pop("is_editing_date_mode", None)
+    context.user_data.pop("invite_event_id", None)
+    context.user_data.pop("edit_event_id", None)
+
     user_id = update.effective_user.id
 
     # 1. АДАПТИВНОЕ ОПРЕДЕЛЕНИЕ ЦЕЛЕВОЙ ДАТЫ

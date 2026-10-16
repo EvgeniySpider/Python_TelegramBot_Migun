@@ -18,21 +18,34 @@ from app.handlers.states import TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
 
 # --- ТЕСТ 1: Приглашение через инлайн-кнопку ---
 @pytest.mark.asyncio
-async def test_handle_invite_event_selection_success():
+@patch('app.handlers.calendar_invite.is_user_invitee_for_event')
+async def test_handle_invite_event_selection_success(
+    mock_is_user_invitee_for_event: AsyncMock
+):
     update_mock, context_mock = AsyncMock(), MagicMock()
+    mock_is_user_invitee_for_event.return_value = False
     # Имитируем клик по второй кнопке (индекс 1)
     update_mock.callback_query.data = "invite_num:1"
+    update_mock.effective_user.id = 12345
 
     context_mock.user_data = {
         "event_text_record": [
-            {"id": 100, "title": "Секретное собрание"},
-            {"id": 200, "title": "Корпоратив"},
-        ]
+            {"id": 100, "title": "Секретное собрание", 'start_time': time(1), 'end_time': time(2)},
+            {"id": 200, "title": "Корпоратив", 'start_time': time(5), 'end_time': time(9)},
+        ],
+        'selected_date': date(2026, 10, 10)
     }
 
     result = await handle_invite_event_selection(update_mock, context_mock)
 
     assert result == TYPING_INVITEE_ID
+
+    mock_is_user_invitee_for_event.assert_awaited_once_with(
+        user_id=12345,
+        selected_date=date(2026, 10, 10),
+        start_time=time(5, 0),
+        end_time=time(9, 0),
+    )
 
     # Проверяем, что ID правильного события сохранен в контекст
     assert context_mock.user_data["invite_event_id"] == 200
@@ -44,27 +57,45 @@ async def test_handle_invite_event_selection_success():
     update_mock.callback_query.edit_message_text.assert_awaited_once()
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
 
-    assert "Выбрано событие: *Корпоратив*" in kwargs["text"]
+
+    assert "*Выбрано событие*: Корпоратив" in kwargs["text"]
+    
     assert "*отправьте Telegram ID*" in kwargs["text"]
     assert kwargs["parse_mode"] == "Markdown"
 
 
 # --- ТЕСТ 2: Приглашение через текстовый ввод номера ---
 @pytest.mark.asyncio
+@patch("app.handlers.calendar_invite.is_user_invitee_for_event")
 @patch("app.handlers.calendar_invite.get_validated_event_index")
-async def test_handle_invite_event_by_text_number_success(mock_get_validated: AsyncMock):
-    event_list = [{"id": 100, "title": "Секретное собрание"}, {"id": 200, "title": "Корпоратив"}]
+async def test_handle_invite_event_by_text_number_success(
+    mock_get_validated: AsyncMock,
+    mock_is_user_invitee_for_event: AsyncMock,
+):
+    mock_is_user_invitee_for_event.return_value = False
+
+    event_list = [
+        {"id": 100, "title": "Секретное собрание", "start_time": time(1), "end_time": time(2)},
+        {"id": 200, "title": "Корпоратив", "start_time": time(5), "end_time": time(9)},
+    ]
 
     # Мокаем успешное прохождение валидатора: возвращаем индекс 1
     mock_get_validated.return_value = (True, 1, event_list)
 
     update_mock, context_mock = AsyncMock(), MagicMock()
-
-    context_mock.user_data = {}
+    update_mock.effective_user.id = 12345
+    context_mock.user_data = {"selected_date": date(2026, 10, 10)}
 
     result = await handle_invite_event_by_text_number(update_mock, context_mock)
 
     assert result == TYPING_INVITEE_ID
+
+    mock_is_user_invitee_for_event.assert_awaited_once_with(
+        user_id=12345,
+        selected_date=date(2026, 10, 10),
+        start_time=time(5, 0),
+        end_time=time(9, 0),
+    )
 
     # Проверяем запись в контекст
     assert context_mock.user_data["invite_event_id"] == 200
@@ -73,7 +104,8 @@ async def test_handle_invite_event_by_text_number_success(mock_get_validated: As
     update_mock.message.reply_text.assert_awaited_once()
     kwargs = update_mock.message.reply_text.call_args.kwargs
 
-    assert "Выбрано событие: *Корпоратив*" in kwargs["text"]
+    # Проверяем актуальную разметку (вынесено из-под звёздочек)
+    assert "📌 *Выбрано событие*: Корпоратив" in kwargs["text"]
     assert "*отправьте Telegram ID*" in kwargs["text"]
     assert kwargs["parse_mode"] == "Markdown"
 
@@ -105,27 +137,29 @@ async def test_handle_invitee_id_input_positive(
     context_mock.bot.send_message = AsyncMock()
 
     # 2. Мокаем вспомогательные функции
-    # Возвращаем (is_valid=True, validation_result=987654321)
     mock_validate.return_value = (True, 987654321)
     mock_check_avail.return_value = False
     mock_gen_keyboard.return_value = "fake_keyboard"
 
     # 3. Мокаем Django ORM
-    # User.objects.filter(telegram_id=...).aexists()
     mock_User.objects.filter.return_value.aexists = AsyncMock(return_value=True)
 
-    # Event.objects.aget(id=...)
     target_event = MagicMock()
     target_event.id = 999
     target_event.title = "Секретное совещание"
     target_event.event_date = date(2026, 10, 20)
     target_event.start_time = time(15, 0)
+    target_event.end_time = time(16, 0)
+    target_event.description = None
     mock_Event.objects.aget = AsyncMock(return_value=target_event)
 
-    # Appointment.objects.aget_or_create(...) возвращает кортеж (объект, created_bool)
+    # Имитируем отсутствие старой записи (человек зовётся впервые)
+    mock_Appointment.objects.filter.return_value.afirst = AsyncMock(return_value=None)
+    
+    # Имитируем создание новой записи
     created_appointment = MagicMock()
     created_appointment.id = 777
-    mock_Appointment.objects.aget_or_create = AsyncMock(return_value=(created_appointment, True))
+    mock_Appointment.objects.acreate = AsyncMock(return_value=created_appointment)
     mock_Appointment.Status.PENDING = "PENDING"
 
     # 4. Вызов хэндлера
@@ -139,19 +173,26 @@ async def test_handle_invitee_id_input_positive(
     mock_User.objects.filter.assert_called_once_with(telegram_id=987654321)
     mock_Event.objects.aget.assert_awaited_once_with(id=999)
     mock_check_avail.assert_awaited_once_with(987654321, target_event)
-    mock_Appointment.objects.aget_or_create.assert_awaited_once_with(
-        event_id=999, invitee_id=987654321, defaults={"status": "PENDING"}
+    
+    # Проверяем, что была вызвана новая связка filter + acreate
+    mock_Appointment.objects.filter.assert_called_once_with(
+        event_id=999, invitee_id=987654321
+    )
+    mock_Appointment.objects.acreate.assert_awaited_once_with(
+        event_id=999, invitee_id=987654321, status="PENDING"
     )
 
-    # 7. Валидация отправки сообщений
+    # 7. Валидация отправки сообщений (Гостю)
     context_mock.bot.send_message.assert_awaited_once()
     send_msg_kwargs = context_mock.bot.send_message.call_args.kwargs
     assert send_msg_kwargs["chat_id"] == 987654321
-    assert "Секретное совещание" in send_msg_kwargs["text"]
-    assert "Шеф" in send_msg_kwargs["text"]
+    assert "📌 Секретное совещание" in send_msg_kwargs["text"]
+    assert 'Шеф' in send_msg_kwargs["text"]
+    assert 'Дата: 20.10.2026' in send_msg_kwargs['text']
+    assert 'Время: 15:00 - 16:00' in send_msg_kwargs['text']
     assert send_msg_kwargs["reply_markup"] == "fake_keyboard"
 
-    # Финальное сообщение самому пользователю (содержит ID приглашенного)
+    # 8. Валидация сообщения (Организатору)
     update_mock.message.reply_text.assert_awaited_once()
     assert "987654321" in update_mock.message.reply_text.call_args.args[0]
 

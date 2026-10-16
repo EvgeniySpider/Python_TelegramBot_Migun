@@ -293,9 +293,21 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
         is_busy = await check_user_availability(query.from_user.id, appointment.event)
 
         if is_busy:
+            appointment.status = Appointment.Status.CANCELLED
+            await appointment.asave()
+
             await query.edit_message_text(
                 "❗ Вы не можете принять приглашение: на это время у вас уже запланировано другое событие."
             )
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=inviter_id,
+                    text=f"⚠️ Пользователь *{query.from_user.id}* попытался принять приглашение на событие {safe_title}, но это время у него уже занято другим делом.",
+                    parse_mode="Markdown",
+                )
+            except TelegramError:
+                pass
             return
 
         # 2. Подтверждаем встречу в промежуточной таблице

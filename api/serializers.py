@@ -71,7 +71,7 @@ class EventSerializer(ModelSerializer):
             if start_time or end_time:
                 raise ValidationError("Для события 'Весь день' поля времени не указываются.")
 
-            # Добавлен user=user
+            # Проверка коллизий: есть ли вообще любые события в этот день?
             conflict_event = Event.objects.filter(user=user, event_date=event_date)
             if conflict_event.exists():
                 times_events = [
@@ -108,19 +108,15 @@ class EventSerializer(ModelSerializer):
 
             attrs["end_time"] = end_time
 
-        if event_type in [Event.EventType.INTERVAL, Event.EventType.EXACT]:
-            if not start_time or not end_time:
-                raise ValidationError("Не указано время для данного типа события.")
-            if start_time >= end_time:
-                raise ValidationError("Время начала должно быть строго раньше времени окончания.")
-
         elif event_type == Event.EventType.INTERVAL:
             if not start_time or not end_time:
                 raise ValidationError(
                     'Для события с типом "интервал" необходимо время начала и конца мероприятия'
                 )
+            if start_time >= end_time:
+                raise ValidationError("Время начала должно быть строго раньше времени окончания.")
 
-        # Исключены тернарные операторы, так как end_time теперь гарантированно определен
+        # Общая проверка коллизий времени для EXACT и INTERVAL
         conflict_event = Event.objects.filter(
             user=user,
             event_date=event_date,

@@ -201,11 +201,20 @@ class EventUpdateSerializer(ModelSerializer):
         end_time = attrs.get("end_time", event.end_time)
         event_type = attrs.get("event_type", event.event_type)
 
-        # 3. ВАЛИДАЦИЯ ALL_DAY
-        if event_type == Event.EventType.ALL_DAY:
-            if start_time or end_time:
-                raise ValidationError("Нельзя передавать время, если событие длится весь день.")
+        # МУТАЦИЯ ALL_DAY ПРИ НАЛИЧИИ ВРЕМЕНИ
+        if event_type == Event.EventType.ALL_DAY and (start_time or end_time):
+            # Если передали только start_time, превращаем в EXACT, иначе в INTERVAL
+            if start_time and not end_time:
+                event_type = Event.EventType.EXACT
+            else:
+                event_type = Event.EventType.INTERVAL
+            
+            # Обязательно обновляем attrs, чтобы сериализатор сохранил новый тип в БД
+            attrs["event_type"] = event_type
+        # ---------------------------------------------------------
 
+        # 3. ВАЛИДАЦИЯ ALL_DAY (Если событие реально остаётся на весь день)
+        if event_type == Event.EventType.ALL_DAY:
             # Проверяем только свои события, исключая текущее
             if Event.objects.filter(user=user, event_date=event_date).exclude(id=event.id).exists():
                 raise ValidationError(

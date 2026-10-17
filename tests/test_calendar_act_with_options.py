@@ -142,21 +142,23 @@ async def test_handle_options_click_edit_one_event_is_invitee(mock_is_invitee: A
 
 
 @pytest.mark.asyncio
-@patch("app.handlers.calendar_act_with_options.Appointment")
+@patch("app.handlers.calendar_act_with_options.get_organizer_edit_error_message")
 @patch("app.handlers.calendar_act_with_options.is_user_invitee_for_event")
 async def test_handle_options_click_edit_one_event_is_organizer(
-    mock_is_invitee: AsyncMock, mock_appointment: MagicMock
+    mock_is_invitee: AsyncMock, mock_get_organizer: AsyncMock
 ):
     # ПОДГОТОВКА
-    # Пользователь НЕ является приглашенным...
+    # Пользователь НЕ является приглашенным
     mock_is_invitee.return_value = False
-
-    # ...НО он сам пригласил кого-то (мокаем цепочку Django ORM .objects.filter().aexists())
-    aexists_mock = AsyncMock(return_value=True)
-    mock_appointment.objects.filter.return_value.aexists = aexists_mock
+    # Пользователь является организатором
+    error_msg = (
+        "❌ На это мероприятие у вас назначена встреча, вы не можете её редактировать. Её можно только удалить."
+    )
+    mock_get_organizer.return_value = error_msg
 
     update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
+    update_mock.effective_user.id = 12345
 
     context_mock.user_data = {
         "selected_date": date(2026, 10, 20),
@@ -177,25 +179,31 @@ async def test_handle_options_click_edit_one_event_is_organizer(
     # ПРОВЕРКИ
     assert result == CHOOSING_ACTION
 
-    # Убеждаемся, что фильтрация в ORM произошла по правильному ID события
-    mock_appointment.objects.filter.assert_called_once_with(event=102, status=mock_appointment.Status.CONFIRMED)
-    aexists_mock.assert_awaited_once()
+    mock_is_invitee.assert_awaited_once_with(
+        user_id = 12345,
+        selected_date = date(2026, 10, 20),
+        start_time = time(12, 0),
+        end_time = time(13, 0)
+    )
 
-    update_mock.callback_query.answer.assert_awaited_once()
+    mock_get_organizer.assert_awaited_once_with(102)
+
+    update_mock.callback_query.answer.assert_awaited_once_with(
+        error_msg, show_alert=False
+    )
     arg = update_mock.callback_query.answer.call_args.args[0]
-    assert "Нельзя редактировать встречу на которую Вы пригласили людей" in arg
+    assert "На это мероприятие у вас назначена встреча, вы не можете её редактировать" in arg
 
 
 @pytest.mark.asyncio
-@patch("app.handlers.calendar_act_with_options.Appointment")
+@patch("app.handlers.calendar_act_with_options.get_organizer_edit_error_message")
 @patch("app.handlers.calendar_act_with_options.is_user_invitee_for_event")
 async def test_handle_options_click_edit_one_event(
-    mock_is_invitee: AsyncMock, mock_appointment: MagicMock
+    mock_is_invitee: AsyncMock, mock_get_organizer: AsyncMock
 ):
     mock_is_invitee.return_value = False
-
-    aexists_mock = AsyncMock(return_value=False)
-    mock_appointment.objects.filter.return_value.aexists = aexists_mock
+    # Возвращаем None, так как препятствий для редактирования нет
+    mock_get_organizer.return_value = None
 
     update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = "action_edit"
@@ -224,6 +232,9 @@ async def test_handle_options_click_edit_one_event(
         start_time=time(12, 0),
         end_time=time(13, 0),
     )
+
+    # Убеждаемся, что утилита была вызвана с нужным ID
+    mock_get_organizer.assert_awaited_once_with(102)
 
     # Убеждаемся что query.answer не вызывался
     update_mock.callback_query.answer.assert_not_awaited()

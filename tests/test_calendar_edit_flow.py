@@ -27,13 +27,13 @@ from app.handlers.states import (
 
 # --- ТЕСТ 1: Позитивный сценарий выбора заметки через инлайн-кнопку ---
 @pytest.mark.asyncio
-@patch("app.handlers.calendar_edit_flow.Appointment")
+@patch("app.handlers.calendar_edit_flow.get_organizer_edit_error_message")
 @patch("app.handlers.calendar_edit_flow.is_user_invitee_for_event")
 async def test_handle_edit_event_selection_success(
-    mock_is_invitee: AsyncMock, mock_appointment: MagicMock
+    mock_is_invitee: AsyncMock, mock_get_organizer: AsyncMock
 ):
     mock_is_invitee.return_value = False
-    mock_appointment.objects.filter.return_value.aexists = AsyncMock(return_value=False)
+    mock_get_organizer.return_value = None  # Возвращаем None (редактировать можно)
 
     update_mock, context_mock = AsyncMock(), MagicMock()
     # Имитируем клик по второй кнопке (индекс 1)
@@ -52,6 +52,9 @@ async def test_handle_edit_event_selection_success(
 
     assert result == CHOOSING_EDIT_FIELD
 
+    # Убеждаемся, что утилита была вызвана с правильным ID события
+    mock_get_organizer.assert_awaited_once_with(11)
+
     # Проверяем, что в context легли данные именно второй заметки (индекс 1)
     assert context_mock.user_data["edit_event_index"] == 1
     assert context_mock.user_data["edit_event_id"] == 11
@@ -63,11 +66,11 @@ async def test_handle_edit_event_selection_success(
 
 # --- ТЕСТ 2: Позитивный сценарий выбора заметки через текстовый ввод ---
 @pytest.mark.asyncio
-@patch("app.handlers.calendar_edit_flow.Appointment")
+@patch("app.handlers.calendar_edit_flow.get_organizer_edit_error_message")
 @patch("app.handlers.calendar_edit_flow.is_user_invitee_for_event")
 @patch("app.handlers.calendar_edit_flow.get_validated_event_index")
 async def test_handle_edit_event_by_text_number_success(
-    mock_get_validated: AsyncMock, mock_is_invitee: AsyncMock, mock_appointment: MagicMock
+    mock_get_validated: AsyncMock, mock_is_invitee: AsyncMock, mock_get_organizer: AsyncMock
 ):
     event_list = [
         {"id": 10, "title": "Событие 0", "start_time": time(9, 0), "end_time": time(10, 0)},
@@ -77,7 +80,7 @@ async def test_handle_edit_event_by_text_number_success(
     # Мокаем успешный возврат валидатора: (is_valid=True, index=1, event_list)
     mock_get_validated.return_value = (True, 1, event_list)
     mock_is_invitee.return_value = False
-    mock_appointment.objects.filter.return_value.aexists = AsyncMock(return_value=False)
+    mock_get_organizer.return_value = None  # Возвращаем None (редактировать можно)
 
     update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.effective_user.id = 12345
@@ -87,6 +90,9 @@ async def test_handle_edit_event_by_text_number_success(
     result = await handle_edit_event_by_text_number(update_mock, context_mock)
 
     assert result == CHOOSING_EDIT_FIELD
+
+    # Убеждаемся, что утилита была вызвана с правильным ID события
+    mock_get_organizer.assert_awaited_once_with(11)
 
     # Снова проверяем, что контекст обновился данными заметки №1
     assert context_mock.user_data["edit_event_index"] == 1

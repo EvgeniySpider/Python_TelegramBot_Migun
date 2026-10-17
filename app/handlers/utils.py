@@ -64,6 +64,24 @@ async def is_user_invitee_for_event(
     ).aexists()
 
 
+async def get_organizer_edit_error_message(event_id: int) -> str | None:
+    """
+    Проверяет наличие встреч (CONFIRMED или PENDING) у события.
+    Возвращает текст ошибки для пользователя или None, если редактирование разрешено.
+    """
+    if await Appointment.objects.filter(
+        event_id=event_id, status=Appointment.Status.CONFIRMED
+    ).aexists():
+        return "❌ На это мероприятие у вас назначена встреча, вы не можете её редактировать. Её можно только удалить."
+
+    if await Appointment.objects.filter(
+        event_id=event_id, status=Appointment.Status.PENDING
+    ).aexists():
+        return "❌ Вы не можете редактировать встречу, на которую уже пригласили людей (ожидается ответ). Её можно только удалить."
+
+    return None
+
+
 async def notify_and_cancel_appointments(
     user_id: int, column_name: str, value: Any, bot: ExtBot
 ) -> None:

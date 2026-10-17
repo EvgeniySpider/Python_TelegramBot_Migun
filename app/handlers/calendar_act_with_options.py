@@ -26,7 +26,7 @@ from app.handlers.states import (
     TYPING_INVITE_NUM,
     TYPING_INVITEE_ID,
 )
-from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
+from app.handlers.utils import get_organizer_edit_error_message, get_validated_event_index, is_user_invitee_for_event
 from events.models import Appointment
 
 
@@ -132,10 +132,9 @@ async def handle_options_click(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 return CHOOSING_ACTION
 
-            if await Appointment.objects.filter(event=event_rec["id"], status=Appointment.Status.CONFIRMED).aexists():
-                await query.answer(
-                    "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
-                )
+            error_msg: str | None = await get_organizer_edit_error_message(event_rec["id"])
+            if error_msg:
+                await query.answer(error_msg, show_alert=False)
                 return CHOOSING_ACTION
 
             detailed_event_text = build_detailed_event_text(

@@ -18,7 +18,7 @@ from app.handlers.states import (
     TYPING_EDIT_TIME,
     TYPING_EDIT_TITLE,
 )
-from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event
+from app.handlers.utils import get_organizer_edit_error_message, get_validated_event_index, is_user_invitee_for_event
 from events.models import Appointment
 
 
@@ -175,10 +175,9 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
         )
         return SELECTING_EDIT_EVENT
 
-    if await Appointment.objects.filter(event=event_rec["id"], status = Appointment.Status.CONFIRMED).aexists():
-        await query.answer(
-            "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
-        )
+    error_msg: str | None = await get_organizer_edit_error_message(event_rec["id"])
+    if error_msg:
+        await query.answer(error_msg, show_alert=True)
         return SELECTING_EDIT_EVENT
 
     context.user_data["edit_event_index"] = index_record
@@ -226,10 +225,9 @@ async def handle_edit_event_by_text_number(
         )
         return TYPING_EDIT_NUM
 
-    if await Appointment.objects.filter(event=event_rec["id"], status=Appointment.Status.CONFIRMED).aexists():
-        await update.message.reply_text(
-            "❌ Нельзя редактировать встречу на которую Вы пригласили людей. Её можно удалить и пересоздать"
-        )
+    error_msg: str | None = await get_organizer_edit_error_message(event_rec["id"])
+    if error_msg:
+        await update.message.reply_text(error_msg)
         return TYPING_EDIT_NUM
 
     context.user_data["edit_event_index"] = index_record

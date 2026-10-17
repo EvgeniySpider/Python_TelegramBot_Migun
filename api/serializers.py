@@ -175,9 +175,14 @@ class EventUpdateSerializer(ModelSerializer):
         event = self.instance  # Гарантированно существует для PATCH/PUT
 
         # 1. ЗАЩИТА ВСТРЕЧ
-        if Appointment.objects.filter(event=event).exists():
+        if Appointment.objects.filter(event=event, status=Appointment.Status.CONFIRMED).exists():
             raise ValidationError(
-                "Вы организовали встречу и её нельзя менять. Возможно только удалить."
+                "На это мероприятие у вас назначена встреча, вы не можете её редактировать. Возможно только удалить."
+            )
+
+        if Appointment.objects.filter(event=event, status=Appointment.Status.PENDING).exists():
+            raise ValidationError(
+                "Вы не можете редактировать встречу, на которую уже пригласили людей (ожидается ответ). Возможно только удалить."
             )
 
         is_invitee_meeting = Appointment.objects.filter(

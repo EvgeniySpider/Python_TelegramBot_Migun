@@ -254,7 +254,7 @@ async def confirm_to_delete(source: CallbackQuery | Update, event: str, delete_t
     """
 
     text_to_send = (
-        f"❓ *Вы уверены, что хотите удалить {delete_text[0]}*\n\n"
+        f"❓ Вы уверены, что хотите удалить {delete_text[0]}\n\n"
         f"{event}"
         f"⚠️ Это действие полностью сотрёт {delete_text[1]}"
     )
@@ -318,7 +318,14 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
 
 
 async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    event_text_record = context.user_data["event_text_record"]
+    selected_date = context.user_data.get("selected_date")
+    event_text_record = context.user_data.get("event_text_record")
+
+    # Защита от протухшей сессии / перезапуска бота
+    if not selected_date or event_text_record is None:
+        await calendar_command(update, context)
+        return ConversationHandler.END
+
     event_count = len(event_text_record)
     cards = [
         build_detailed_event_text(event_text_record, index=i, numbered=True)
@@ -327,9 +334,8 @@ async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DE
     events_text = "\n".join(cards) + "\n"
 
     source = update.callback_query if update.callback_query else update
-    date = context.user_data["selected_date"]
     header = context.user_data.pop("edit_success_status", "")
 
     return await handle_options_with_exist_notes_in_day(
-        events_text, (source, date.day, date.month, date.year), header=header
+        events_text, (source, selected_date.day, selected_date.month, selected_date.year), header=header
     )

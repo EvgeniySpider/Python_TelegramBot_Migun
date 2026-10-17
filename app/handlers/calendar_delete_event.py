@@ -52,6 +52,7 @@ async def prepare_after_delete(update: Update, context: ContextTypes.DEFAULT_TYP
     # Подчищаем за собой оперативку
     context.user_data.pop("delete_event_id", None)
     context.user_data.pop("event_text_record", None)
+    context.user_data.pop("column_name", None)
     alert_text = context.user_data.pop("delete_alert_text", "🗑️ Мероприятие успешно удалено!")
     await query.answer(text=alert_text)
     # Вызываем календарь заново, чтобы юзер видел актуальную сетку месяца

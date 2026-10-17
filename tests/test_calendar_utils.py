@@ -6,10 +6,12 @@ import pytest
 
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.utils import (
+    get_organizer_edit_error_message,
     get_validated_event_index,
     notify_and_cancel_appointments,
     validate_telegram_id_input,
 )
+from events.models import Appointment
 
 
 def test_build_detailed_event_text_basic():
@@ -356,3 +358,42 @@ def test_validate_telegram_id_input(
     )
 
     assert result == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "active_status, expected_error_fragment",
+    [
+        (
+            Appointment.Status.CONFIRMED,
+            "На это мероприятие у вас назначена встреча, вы не можете её редактировать",
+        ),
+        (
+            Appointment.Status.PENDING,
+            "Вы не можете редактировать встречу, на которую уже пригласили людей",
+        ),
+        (None, None),
+    ],
+)
+@patch("app.handlers.utils.Appointment")
+async def test_get_organizer_edit_error_message(
+    mock_appointment: MagicMock,
+    active_status: Appointment.Status | None,
+    expected_error_fragment: str | None
+):
+    # Динамически возвращаем True только для того статуса, который тестируем
+    def fake_filter(event_id: int, status: str):
+        mock_qs = MagicMock()
+        mock_qs.aexists = AsyncMock(return_value=(status == active_status))
+        return mock_qs
+
+    mock_appointment.Status = Appointment.Status
+    mock_appointment.objects.filter.side_effect = fake_filter
+
+    result: str | None = await get_organizer_edit_error_message(event_id=123)
+
+    if expected_error_fragment is None:
+        assert result is None
+    else:
+        assert result is not None
+        assert expected_error_fragment in result

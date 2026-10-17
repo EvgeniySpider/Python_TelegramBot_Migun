@@ -779,8 +779,7 @@ async def test_confirm_to_delete_from_callback(mock_gen_keyboard: AsyncMock):
     # Проверяем аргументы и форматирование текста
     kwargs = source_mock.edit_message_text.call_args.kwargs
     text = kwargs["text"]
-
-    assert "❓ *Вы уверены, что хотите удалить событие № 1?*" in text
+    assert "❓ Вы уверены, что хотите удалить событие № 1?" in text
     assert "Событие: [10:00 - 11:00] Встреча 1" in text
     assert "⚠️ Это действие полностью сотрёт эту заметку." in text
 
@@ -813,7 +812,7 @@ async def test_confirm_to_delete_from_text_update(mock_gen_keyboard: AsyncMock):
     kwargs = source_mock.message.reply_text.call_args.kwargs
     text = kwargs["text"]
 
-    assert "❓ *Вы уверены, что хотите удалить все мероприятия?*" in text
+    assert "❓ Вы уверены, что хотите удалить все мероприятия?" in text
     assert "Событие: [12:00 - 13:00] Встреча 2" in text
     assert "⚠️ Это действие полностью сотрёт вообще всё." in text
 

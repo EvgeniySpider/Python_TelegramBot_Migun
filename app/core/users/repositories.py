@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime
+
+from django.utils import timezone
 
 from app.infra.postgres.db import Database
 
@@ -9,7 +10,7 @@ class UserRepository:
     database: Database
 
     async def create_user_if_not_exists(self, user_id: int) -> None:
-        current_time = datetime.now()
+        current_time = timezone.now()
         current_date = current_time.date()
 
         async with self.database.connection() as conn:

@@ -1,5 +1,6 @@
-from datetime import date
 from typing import Literal, get_args
+
+from django.utils import timezone
 
 from app.infra.postgres.db import Database
 
@@ -28,7 +29,7 @@ class StatsRepository:
         if metric_name not in ALLOWED_METRICS:
             raise ValueError(f"Недопустимая метрика: {metric_name}")
 
-        today = date.today()
+        today = timezone.localdate()
 
         query = f"""
             INSERT INTO events_botstatistics (

@@ -240,3 +240,56 @@ def test_patch_exact_event_late_night_truncation(auth_client: APIClient, private
     private_event.refresh_from_db()
     assert str(private_event.start_time) == "23:55:00"
     assert str(private_event.end_time) == "23:59:00"
+
+
+@pytest.mark.django_db
+def test_patch_all_day_mutates_to_exact_when_start_time_provided(
+    auth_client: APIClient, public_event: Event
+):
+    """
+    Проверяет, что при передаче только start_time событие all_day
+    автоматически мутирует в exact с расчетом end_time (+30 мин).
+    """
+    # public_event из conftest имеет event_type='all_day'
+    url: str = reverse("api:private-events-detail", kwargs={"pk": public_event.id})
+    payload = {"start_time": "14:00"}
+
+    response: Response = auth_client.patch(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data: dict = response.json()
+    assert data["event_type"] == Event.EventType.EXACT
+    assert data["start_time"] == "14:00:00"
+    assert data["end_time"] == "14:30:00"
+
+    public_event.refresh_from_db()
+    assert public_event.event_type == Event.EventType.EXACT
+    assert str(public_event.start_time) == "14:00:00"
+    assert str(public_event.end_time) == "14:30:00"
+
+
+@pytest.mark.django_db
+def test_patch_all_day_mutates_to_interval_when_both_times_provided(
+    auth_client: APIClient, public_event: Event
+):
+    """
+    Проверяет, что при передаче start_time и end_time событие all_day
+    автоматически мутирует в interval.
+    """
+    url: str = reverse("api:private-events-detail", kwargs={"pk": public_event.id})
+    payload = {"start_time": "10:00", "end_time": "12:00"}
+
+    response: Response = auth_client.patch(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data: dict = response.json()
+    assert data["event_type"] == Event.EventType.INTERVAL
+    assert data["start_time"] == "10:00:00"
+    assert data["end_time"] == "12:00:00"
+
+    public_event.refresh_from_db()
+    assert public_event.event_type == Event.EventType.INTERVAL
+    assert str(public_event.start_time) == "10:00:00"
+    assert str(public_event.end_time) == "12:00:00"

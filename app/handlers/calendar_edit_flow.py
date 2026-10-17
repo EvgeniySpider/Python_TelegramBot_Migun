@@ -301,6 +301,7 @@ async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_
             end_time,
             event_id,
         )
+        context.user_data["current_event_time"] = (start_time, end_time)
 
         header = (
             f"✅ Время события успешно изменено!\n"
@@ -440,6 +441,7 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
 
 async def back_to_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
+    user_id = update.effective_user.id
 
     event_text_record = context.user_data.get("event_text_record", [])
     current_index = context.user_data.get("edit_event_index", 0)
@@ -449,7 +451,18 @@ async def back_to_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
     if context.user_data.get("is_editing_date_mode"):
-        context.user_data["is_editing_date_mode"] = False
+        context.user_data.pop("is_editing_date_mode", None)  # Чистим мусор через pop
+
+    # Восстанавливаем кэш занятости для ИСХОДНОГО месяца!
+    # Если мы листали месяцы во время попытки сменить дату, в month_busy_days 
+    # остались чужие дни. Синхронизируем их обратно с selected_date.
+    if "selected_date" in context.user_data:
+        selected_date = context.user_data["selected_date"]
+        async with context.application.database.connection() as conn:
+            busy_days = await CalendarService.get_user_busy_days(
+                conn=conn, user_id=user_id, year=selected_date.year, month=selected_date.month
+            )
+        context.user_data["month_busy_days"] = busy_days
 
     # Динамический заголовок (чтобы интерфейс соответствовал реальности)
     header = (

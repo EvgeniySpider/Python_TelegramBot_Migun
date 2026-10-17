@@ -177,7 +177,7 @@ async def handle_edit_event_selection(update: Update, context: ContextTypes.DEFA
 
     error_msg: str | None = await get_organizer_edit_error_message(event_rec["id"])
     if error_msg:
-        await query.answer(error_msg, show_alert=True)
+        await query.answer(error_msg, show_alert=False)
         return SELECTING_EDIT_EVENT
 
     context.user_data["edit_event_index"] = index_record
@@ -227,7 +227,7 @@ async def handle_edit_event_by_text_number(
 
     error_msg: str | None = await get_organizer_edit_error_message(event_rec["id"])
     if error_msg:
-        await update.message.reply_text(error_msg)
+        await update.message.reply_text(error_msg, show_alert=False)
         return TYPING_EDIT_NUM
 
     context.user_data["edit_event_index"] = index_record

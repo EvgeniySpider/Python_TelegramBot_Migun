@@ -1,3 +1,5 @@
+from datetime import date, time, timedelta
+
 import pytest
 from django.urls import reverse
 from rest_framework import status
@@ -293,3 +295,120 @@ def test_patch_all_day_mutates_to_interval_when_both_times_provided(
     assert public_event.event_type == Event.EventType.INTERVAL
     assert str(public_event.start_time) == "10:00:00"
     assert str(public_event.end_time) == "12:00:00"
+
+
+@pytest.mark.django_db
+def test_patch_move_interval_to_date_with_all_day_collision(
+    auth_client: APIClient, test_user: User, private_event: Event
+):
+    """
+    Проверяет, что нельзя перенести интервальное/точное событие на дату,
+    где у пользователя уже запланировано событие 'all_day'.
+    """
+    target_date = date.today() + timedelta(days=1)
+    
+    # Создаем событие на весь день на целевую дату (завтра)
+    Event.objects.create(
+        user=test_user,
+        event_type=Event.EventType.ALL_DAY,
+        title="День отдыха",
+        event_date=target_date,
+        is_public=False,
+    )
+
+    url = reverse("api:private-events-detail", kwargs={"pk": private_event.id})
+    payload = {"event_date": str(target_date)}
+
+    response: Response = auth_client.patch(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert "non_field_errors" in errors
+    assert "уже запланировано событие на весь день" in errors["non_field_errors"][0]
+
+
+@pytest.mark.django_db
+def test_patch_move_all_day_to_busy_date_collision(
+    auth_client: APIClient, test_user: User, public_event: Event
+):
+    """
+    Проверяет, что нельзя перенести событие 'all_day' на дату,
+    где уже есть ЛЮБЫЕ другие события пользователя.
+    """
+    target_date = date.today() + timedelta(days=1)
+    
+    # Создаем обычное точечное событие на целевую дату (завтра)
+    Event.objects.create(
+        user=test_user,
+        event_type=Event.EventType.INTERVAL,
+        title="Обычное дело",
+        event_date=target_date,
+        start_time=time(10, 0),
+        end_time=time(11, 0),
+        is_public=False,
+    )
+
+    # public_event имеет тип all_day
+    url = reverse("api:private-events-detail", kwargs={"pk": public_event.id})
+    payload = {"event_date": str(target_date)}
+
+    response: Response = auth_client.patch(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert "non_field_errors" in errors
+    assert "Этот день уже занят" in errors["non_field_errors"][0]
+
+
+@pytest.mark.django_db
+def test_patch_exact_event_start_time_at_midnight_boundary_forbidden(
+    auth_client: APIClient, private_event: Event
+):
+    """
+    Проверяет запрет установки start_time на 23:59 для exact события при PATCH
+    (защита от нулевой длительности).
+    """
+    url = reverse("api:private-events-detail", kwargs={"pk": private_event.id})
+    payload = {"start_time": "23:59"}
+
+    response: Response = auth_client.patch(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert "non_field_errors" in errors
+    assert "не может быть позже 23:58" in errors["non_field_errors"][0]
+
+
+@pytest.mark.django_db
+def test_put_alien_event_returns_404(auth_client: APIClient, alien_event: Event):
+    """
+    Проверяет, что полный апдейт (PUT) чужого события отсекается с 404 Not Found (защита от IDOR).
+    """
+    url = reverse("api:private-events-detail", kwargs={"pk": alien_event.id})
+    payload = {
+        "title": "Попытка украсть событие через PUT",
+        "event_date": str(alien_event.event_date),
+        "start_time": "12:00",
+        "is_public": False,
+    }
+
+    response: Response = auth_client.put(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    alien_event.refresh_from_db()
+    assert alien_event.title != payload["title"]
+
+
+@pytest.mark.django_db
+def test_patch_empty_title_forbidden(auth_client: APIClient, private_event: Event):
+    """
+    Проверяет валидацию пустого заголовка при частичном обновлении.
+    """
+    url = reverse("api:private-events-detail", kwargs={"pk": private_event.id})
+    payload = {"title": ""}
+
+    response: Response = auth_client.patch(url, data=payload, format="json")
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    errors = response.json()
+    assert "title" in errors

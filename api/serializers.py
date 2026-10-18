@@ -1,0 +1,290 @@
+from datetime import datetime, time, timedelta
+
+from rest_framework.serializers import CharField, ModelSerializer, ValidationError
+
+from app.core.calendar.utils import format_event_time
+from events.models import Appointment, Event
+
+
+class PublicEventSerializer(ModelSerializer):
+    # Добавляем человекочитаемое поле типа события, используя метод get_event_type_display
+    type_display = CharField(source="get_event_type_display", read_only=True)
+
+    class Meta:
+        model = Event
+        fields = [
+            "id",
+            "user",
+            "event_type",
+            "type_display",
+            "title",
+            "description",
+            "event_date",
+            "start_time",
+            "end_time",
+            "is_public",
+        ]
+        read_only_fields = ["id", "user", "created_at"]
+
+
+class EventSerializer(ModelSerializer):
+    """
+    Сериализатор для создания (POST) и чтения (GET) личных событий пользователя.
+    Обновление (PUT/PATCH) вынесено в EventUpdateSerializer.
+    """
+
+    # Добавляем человекочитаемое отображение типа события (только для чтения)
+    type_display = CharField(source="get_event_type_display", read_only=True)
+
+    class Meta:
+        model = Event
+        fields = [
+            "id",
+            "user",
+            "event_type",
+            "type_display",
+            "title",
+            "description",
+            "event_date",
+            "start_time",
+            "end_time",
+            "is_public",
+            "created_at",
+        ]
+        # Поле user заполняется автоматически во вьюхе (perform_create)
+        read_only_fields = ["id", "user", "created_at"]
+
+    def validate(self, attrs: dict) -> dict:
+        user = self.context["request"].user
+        event_type = attrs.get("event_type")
+        event_date = attrs.get("event_date")
+        start_time = attrs.get("start_time")
+        end_time = attrs.get("end_time")
+
+        # Проверка: не занят ли весь день уже существующим событием all_day
+        if Event.objects.filter(
+            user=user, event_date=event_date, event_type=Event.EventType.ALL_DAY
+        ).exists():
+            raise ValidationError("Этот день весь занят")
+
+        if event_type == Event.EventType.ALL_DAY:
+            if start_time or end_time:
+                raise ValidationError("Для события 'Весь день' поля времени не указываются.")
+
+            # Проверка коллизий: есть ли вообще любые события в этот день?
+            conflict_event = Event.objects.filter(user=user, event_date=event_date)
+            if conflict_event.exists():
+                times_events = [
+                    format_event_time(event.start_time, event.end_time)
+                    for event in conflict_event
+                    if event.start_time and event.end_time
+                ] or ["Весь день"]
+
+                raise ValidationError(
+                    f"В этом дне уже есть события со следующими временами: {times_events}. "
+                    "Целый день из-за наличия событий занять невозможно"
+                )
+            return attrs
+
+        elif event_type == Event.EventType.EXACT:
+            if not start_time:
+                raise ValidationError(
+                    'Для события с типом "точное время" необходимо указать start_time'
+                )
+            if end_time:
+                raise ValidationError('Для события с типом "точное время" end_time не указывается')
+
+            if start_time >= time(23, 59):
+                raise ValidationError("Время начала для точного события не может быть позже 23:58.")
+
+            # Если введено время больше чем 23:29
+            if start_time > time(23, 29):
+                end_time = time(23, 59)
+            else:
+                if not event_date or not start_time:
+                    raise ValidationError("Необходимо указать дату и время.")
+                start_dt = datetime.combine(event_date, start_time)
+                end_time = (start_dt + timedelta(minutes=30)).time()
+
+            attrs["end_time"] = end_time
+
+        elif event_type == Event.EventType.INTERVAL:
+            if not start_time or not end_time:
+                raise ValidationError(
+                    'Для события с типом "интервал" необходимо время начала и конца мероприятия'
+                )
+            if start_time >= end_time:
+                raise ValidationError("Время начала должно быть строго раньше времени окончания.")
+
+        # Общая проверка коллизий времени для EXACT и INTERVAL
+        conflict_event = Event.objects.filter(
+            user=user,
+            event_date=event_date,
+            start_time__isnull=False,
+            end_time__isnull=False,
+            start_time__lt=end_time,
+            end_time__gt=start_time,
+        )
+
+        if conflict_event.exists():
+            conflict_events = [
+                format_event_time(event.start_time, event.end_time) for event in conflict_event
+            ]
+            raise ValidationError(
+                f"Конфликт времени, в этот день у вас занято следующее время: {conflict_events}"
+            )
+
+        return attrs
+
+    def to_representation(self, instance: Event):
+        """Перехватываем готовый JSON перед отправкой и добавляем уведомление."""
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+
+        # Добавляем warning ТОЛЬКО при создании, исключая GET-запросы
+        if request and request.method == "POST":
+            # Если событие EXACT и время было обрезано, добавляем поле warning
+            if (
+                instance.event_type == Event.EventType.EXACT
+                and instance.start_time
+                and instance.start_time > time(23, 29)
+            ):
+                data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+
+        return data
+
+
+class EventUpdateSerializer(ModelSerializer):
+    class Meta:
+        model = Event
+        fields = [
+            "id",
+            "event_type",
+            "title",
+            "description",
+            "event_date",
+            "start_time",
+            "end_time",
+            "is_public",
+            "created_at",
+        ]
+        # Поля, которые отдаются в ответе, но защищены от изменений:
+        read_only_fields = [
+            "id",
+            "event_type",
+            "created_at",
+        ]
+
+    def validate(self, attrs: dict) -> dict:
+        user = self.context["request"].user
+        event = self.instance  # Гарантированно существует для PATCH/PUT
+
+        # 1. ЗАЩИТА ВСТРЕЧ
+        if Appointment.objects.filter(event=event, status=Appointment.Status.CONFIRMED).exists():
+            raise ValidationError(
+                "На это мероприятие у вас назначена встреча, вы не можете её редактировать. Возможно только удалить."
+            )
+
+        if Appointment.objects.filter(event=event, status=Appointment.Status.PENDING).exists():
+            raise ValidationError(
+                "Вы не можете редактировать встречу, на которую уже пригласили людей (ожидается ответ). Возможно только удалить."
+            )
+
+        is_invitee_meeting = Appointment.objects.filter(
+            invitee=user,
+            status=Appointment.Status.CONFIRMED,
+            event__event_date=event.event_date,
+            event__start_time=event.start_time,
+            event__end_time=event.end_time,
+            event__event_type=event.event_type,
+        ).exists()
+
+        if is_invitee_meeting:
+            raise ValidationError(
+                "Вас пригласили на встречу, её изменить нельзя. Возможно только удалить."
+            )
+
+        # 2. ПОДГОТОВКА ДАННЫХ (Берем из JSON, если не прислали — достаем из старого объекта)
+        event_date = attrs.get("event_date", event.event_date)
+        start_time = attrs.get("start_time", event.start_time)
+        end_time = attrs.get("end_time", event.end_time)
+        event_type = attrs.get("event_type", event.event_type)
+
+        # МУТАЦИЯ ALL_DAY ПРИ НАЛИЧИИ ВРЕМЕНИ
+        if event_type == Event.EventType.ALL_DAY and (start_time or end_time):
+            # Если передали только start_time, превращаем в EXACT, иначе в INTERVAL
+            if start_time and not end_time:
+                event_type = Event.EventType.EXACT
+            else:
+                event_type = Event.EventType.INTERVAL
+
+            # Обязательно обновляем attrs, чтобы сериализатор сохранил новый тип в БД
+            attrs["event_type"] = event_type
+        # ---------------------------------------------------------
+
+        # 3. ВАЛИДАЦИЯ ALL_DAY (Если событие реально остаётся на весь день)
+        if event_type == Event.EventType.ALL_DAY:
+            # Проверяем только свои события, исключая текущее
+            if Event.objects.filter(user=user, event_date=event_date).exclude(id=event.id).exists():
+                raise ValidationError(
+                    "Этот день уже занят, перенос события 'Весь день' невозможен."
+                )
+
+            # Принудительно зануляем время перед сохранением, если меняли тип события
+            attrs["start_time"] = None
+            attrs["end_time"] = None
+            return attrs
+
+        # 4. ВАЛИДАЦИЯ EXACT И INTERVAL
+        if event_type == Event.EventType.EXACT and start_time:
+            if start_time >= time(23, 59):
+                raise ValidationError("Время начала события не может быть позже 23:58.")
+
+            # Если пользователь в PUT/PATCH выбрал время больше 23:29
+            if start_time > time(23, 29):
+                end_time = time(23, 59)
+            else:
+                combined_dt = datetime.combine(event_date, start_time)
+                end_time = (combined_dt + timedelta(minutes=30)).time()
+
+            attrs["end_time"] = end_time
+
+        if event_type in [Event.EventType.INTERVAL, Event.EventType.EXACT]:
+            if not start_time or not end_time:
+                raise ValidationError("Не указано время для данного типа события.")
+            if start_time >= end_time:
+                raise ValidationError("Время начала должно быть строго раньше времени окончания.")
+
+        if (
+            Event.objects.filter(
+                user=user, event_date=event_date, event_type=Event.EventType.ALL_DAY
+            )
+            .exclude(id=event.id)
+            .exists()
+        ):
+            raise ValidationError(
+                "На эту дату уже запланировано событие на весь день, добавить точное время или интервал нельзя."
+            )
+
+        # 5. ПРОВЕРКА КОЛЛИЗИЙ ВРЕМЕНИ
+        qs_conflicts = Event.objects.filter(
+            user=user, event_date=event_date, start_time__lt=end_time, end_time__gt=start_time
+        ).exclude(id=event.id)
+
+        if qs_conflicts.exists():
+            raise ValidationError(
+                "Конфликт времён. Выбранный интервал пересекается с другим вашим событием."
+            )
+
+        return attrs
+
+    def to_representation(self, instance: Event):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+
+        # Добавляем warning ТОЛЬКО при изменении, исключая случайные чтения
+        if request and request.method in ("PUT", "PATCH"):
+            if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
+                data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+
+        return data

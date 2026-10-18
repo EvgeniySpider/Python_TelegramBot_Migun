@@ -1,56 +1,72 @@
 from telegram.ext import (
-    BaseHandler, 
-    CommandHandler, 
-    CallbackQueryHandler, 
-    MessageHandler, 
-    ConversationHandler, 
-    filters
+    BaseHandler,
+    CallbackQueryHandler,
+    CommandHandler,
+    ConversationHandler,
+    MessageHandler,
+    filters,
 )
-from app.handlers.commands import start, calendar_command
+
+from app.handlers.authorization import api_token_command
 from app.handlers.calendar_act_with_options import (
-    handle_options_click,
     handle_back_to_calendar_click,
+    handle_back_to_day_menu_click,
     handle_delete_event_by_number,
-    handle_back_to_day_menu_click
+    handle_options_click,
 )
 from app.handlers.calendar_callbacks import handle_calendar_click, handle_calendar_nav_click
-from app.handlers.calendar_delete_event import handle_delete_confirmation, handle_delete_choice
+from app.handlers.calendar_delete_event import handle_delete_choice, handle_delete_confirmation
 from app.handlers.calendar_edit_flow import (
+    back_to_edit_menu,
+    handle_edit_date_selection,
+    handle_edit_event_by_text_number,
+    handle_edit_event_selection,
     handle_edit_field_click,
     handle_typing_edit_desc,
-    handle_typing_edit_title,
-    handle_edit_event_selection,
-    handle_edit_event_by_text_number,
     handle_typing_edit_time,
-    handle_edit_date_selection,
-    back_to_edit_menu
+    handle_typing_edit_title,
+)
+from app.handlers.calendar_invite import (
+    handle_ask_telegram_id_for_public_events,
+    handle_invite_event_by_text_number,
+    handle_invite_event_selection,
+    handle_invite_response,
+    handle_invitee_id_input,
+    handle_show_meetings,
+    handle_show_public_events_another_user,
 )
 from app.handlers.calendar_set_event import (
-    handle_set_event,
-    handle_title_input,
     handle_desc_choice,
     handle_description_input,
+    handle_set_event,
     handle_time_input_exact,
     handle_time_input_interval,
+    handle_title_input,
 )
+from app.handlers.commands import calendar_command, start
+from app.handlers.export_events import handle_export_events
 from app.handlers.states import (
+    CHOOSING_ACTION,
+    CHOOSING_EDIT_FIELD,
+    CHOOSING_EVENT_TO_DELETE,
     CHOOSING_TIME,
-    WAITING_FOR_TITLE,
+    CONFIRMING_DELETE,
+    SELECTING_EDIT_EVENT,
+    SELECTING_INVITE_EVENT,
+    TYPING_EDIT_DATE,
+    TYPING_EDIT_DESC,
+    TYPING_EDIT_NUM,
+    TYPING_EDIT_TIME,
+    TYPING_EDIT_TITLE,
+    TYPING_EVENT_NUMBER_TO_DELETE,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID,
+    TYPING_PUBLIC_EVENTS_USER_ID,
     WAITING_FOR_DESC_CHOICE,
     WAITING_FOR_DESCRIPTION,
-    CHOOSING_ACTION,
     WAITING_FOR_TIME_INPUT_EXACT,
     WAITING_FOR_TIME_INPUT_INTERVAL,
-    CONFIRMING_DELETE,
-    CHOOSING_EVENT_TO_DELETE,
-    TYPING_EVENT_NUMBER_TO_DELETE,
-    CHOOSING_EDIT_FIELD,
-    SELECTING_EDIT_EVENT,
-    TYPING_EDIT_NUM,
-    TYPING_EDIT_TITLE,
-    TYPING_EDIT_DESC,
-    TYPING_EDIT_TIME,
-    TYPING_EDIT_DATE
+    WAITING_FOR_TITLE,
 )
 
 # ============================================================================
@@ -59,136 +75,153 @@ from app.handlers.states import (
 calendar_conversation = ConversationHandler(
     # Точка входа в диалог: срабатывает исключительно при клике на конкретный день месяца
     entry_points=[
-        CallbackQueryHandler(handle_calendar_click, pattern = r"^(calendar_day:.+|calendar_ignore)$")
+        # Вход через клик по дню месяца
+        CallbackQueryHandler(handle_calendar_click, pattern=r"^(calendar_day:.+|calendar_ignore)$"),
+        # Вход через кнопку "Общие события"
+        CallbackQueryHandler(handle_ask_telegram_id_for_public_events, pattern=r"^public_events$"),
     ],
-    
     states={
         # СТEЙТ 1: Главное меню выбранного дня (когда в дне уже есть события)
-        CHOOSING_ACTION : [
-            # Перехват действий пользователя: Создать новое, Редактировать или Удалить запись
-            CallbackQueryHandler(handle_options_click, pattern=r"^(action_create|action_edit|action_delete)$"),
-            # Кнопка возврата к общей сетке календаря на текущий месяц
-            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$")
+        CHOOSING_ACTION: [
+            # Перехват действий пользователя: Создать новое, Редактировать, Удалить запись или Назначить встречу
+            CallbackQueryHandler(
+                handle_options_click,
+                pattern=r"^(action_create|action_edit|action_delete|action_invite)$",
+            )
         ],
         CHOOSING_EDIT_FIELD: [
-        # Ловим клики по кнопкам "Название", "Описание", "Время", "Дата" или "Назад"
-        CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_field:cancel$"),
-        CallbackQueryHandler(handle_edit_field_click, pattern=r"^edit_field:.+$"),
+            # Ловим клики по кнопкам "Название", "Описание", "Время", "Дата" или "Назад"
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_field:cancel$"),
+            CallbackQueryHandler(handle_edit_field_click, pattern=r"^edit_field:.+$"),
         ],
-
         SELECTING_EDIT_EVENT: [
             CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_num:cancel$"),
-            CallbackQueryHandler(handle_edit_event_selection, pattern=r"^edit_num:.+$")
+            CallbackQueryHandler(handle_edit_event_selection, pattern=r"^edit_num:.+$"),
         ],
-
         TYPING_EDIT_NUM: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_edit_event_by_text_number),
-            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_num:cancel$")
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^edit_num:cancel$"),
         ],
-
         TYPING_EDIT_TITLE: [
-        # Ловим текстовый ввод нового названия
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_title)
+            # Ловим текстовый ввод нового названия
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_title)
         ],
-
         TYPING_EDIT_DESC: [
-        # Ловим текстовый ввод нового описания
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_desc)
+            # Ловим текстовый ввод нового описания
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_desc)
         ],
-
         TYPING_EDIT_TIME: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_typing_edit_time)
         ],
         TYPING_EDIT_DATE: [
             # Если пользователь внутри редактирования даты нажмет на день месяца:
             CallbackQueryHandler(handle_edit_date_selection, pattern=r"^calendar_day:"),
-            CallbackQueryHandler(back_to_edit_menu, pattern=r"^back_to_edit_menu$")
+            CallbackQueryHandler(back_to_edit_menu, pattern=r"^back_to_edit_menu$"),
+        ],
+        SELECTING_INVITE_EVENT: [
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$"),
+            CallbackQueryHandler(handle_invite_event_selection, pattern=r"^invite_num:.+$"),
+        ],
+        TYPING_INVITE_NUM: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invite_event_by_text_number),
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^invite_num:cancel$"),
+        ],
+        TYPING_INVITEE_ID: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_invitee_id_input),
+            # Кнопка отмены на случай, если юзер передумал вводить ID
+            CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^cancel_invite$"),
+        ],
+        TYPING_PUBLIC_EVENTS_USER_ID: [
+            # Ловим текст с ID
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_show_public_events_another_user),
         ],
         # СТEЙТ 2: Экран окончательного подтверждения деструктивных операций (Да/Нет)
-        CONFIRMING_DELETE : [
+        CONFIRMING_DELETE: [
             # Реагирует строго на кнопки подтверждения 'confirm_delete_yes' или отмены 'confirm_delete_no'
             CallbackQueryHandler(handle_delete_confirmation, pattern=r"^confirm_delete_(yes|no)$")
         ],
-        
         # СТEЙТ 3: Меню выбора мишени удаления через инлайн-кнопки (при количестве событий от 2 до 10)
-        CHOOSING_EVENT_TO_DELETE : [
+        CHOOSING_EVENT_TO_DELETE: [
             # Ловит паттерны номеров 'del_num:0', 'del_num:1', а также системные 'cancel' и 'everything'
             CallbackQueryHandler(handle_delete_choice, pattern=r"^del_num:.+$")
         ],
-        
         # СТEЙТ 4: Меню удаления через клавиатуру (при количестве событий более 10)
-        TYPING_EVENT_NUMBER_TO_DELETE : [
+        TYPING_EVENT_NUMBER_TO_DELETE: [
             # Хэндлер 1: Перехватывает валидный текст (цифру номера события) от пользователя
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_delete_event_by_number),
             # Хэндлер 2: Твоя точечная регулярка для обработки системных инлайн-кнопок под списком
-            CallbackQueryHandler(handle_delete_choice, pattern=r"^(del_num:everything|del_num:cancel)$")
+            CallbackQueryHandler(
+                handle_delete_choice, pattern=r"^(del_num:everything|del_num:cancel)$"
+            ),
         ],
-        
         # СТEЙТ 5: Выбор типа создаваемого мероприятия (Праздный день или после клика «Создать»)
         CHOOSING_TIME: [
             # Перехват клика по кнопкам: "Весь день", "Точное время" или "Интервал"
             CallbackQueryHandler(handle_set_event, pattern=r"^event_time:.+$"),
             # Позволяет прервать сценарий создания и вернуться в сетку месяца
             CallbackQueryHandler(handle_back_to_day_menu_click, pattern=r"^back_to_day_menu$"),
-            CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"),
         ],
-        
         # СТEЙТ 6: Ожидание ввода точного времени начала (формат ЧЧ:ММ, например 14:15)
         WAITING_FOR_TIME_INPUT_EXACT: [
             # Ловит только текст, исключая команды, для последующего расчета +30 минут к интервалу
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_input_exact)
         ],
-        
         # СТEЙТ 7: Ожидание ввода временного интервала (формат ЧЧ:ММ-ЧЧ:ММ, например 12:00-14:30)
-        WAITING_FOR_TIME_INPUT_INTERVAL : [
+        WAITING_FOR_TIME_INPUT_INTERVAL: [
             # Передаёт строку на жесткую валидацию регулярным выражением и проверку конфликтов в БД
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_input_interval)
         ],
-        
         # СТEЙТ 8: Сбор текстового заголовка (названия) создаваемого события
         WAITING_FOR_TITLE: [
             # Сохраняет введенную строку в контекст как event_title и предлагает добавить описание
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_title_input)
         ],
-        
         # СТEЙТ 9: Выбор необходимости заполнения поля "Описание"
         WAITING_FOR_DESC_CHOICE: [
             # Обрабатывает инлайн-кнопки [Да] (перевод в WAITING_FOR_DESCRIPTION) или [Нет] (быстрая запись в БД)
             CallbackQueryHandler(handle_desc_choice, pattern=r"^desc_(yes|no)$")
         ],
-        
         # СТEЙТ 10: Ожидание развернутого текстового описания (заметки) к событию
         WAITING_FOR_DESCRIPTION: [
             # Финальный текстовый хэндлер, после которого данные улетают в базу данных PostgreSQL
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_description_input)
-        ]
+        ],
     },
-    
     # Системные команды экстренного выхода, доступные пользователю на любом этапе диалога
     fallbacks=[
         # Сброс текущей ветки и вызов свежего календаря поверх старого интерфейса
-        CommandHandler("calendar", calendar_command)
+        CommandHandler("calendar", calendar_command),
+        CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"),
     ],
-    
     # Архитектурные флаги изоляции контекстов
     per_message=False,  # Состояние привязано к чату/юзеру, а не к конкретному сообщению
-    per_chat=True,      # Изолирует состояния внутри конкретного чата
-    per_user=True,      # Гарантирует, что разные пользователи не пересекутся в одном стейте
-    allow_reentry=True  # Позволяет повторно входить в ConversationHandler без конфликтов
+    per_chat=True,  # Изолирует состояния внутри конкретного чата
+    per_user=True,  # Гарантирует, что разные пользователи не пересекутся в одном стейте
+    allow_reentry=True,  # Позволяет повторно входить в ConversationHandler без конфликтов
 )
 
 # ============================================================================
 # КОРНЕВОЙ НАБОР ХЭНДЛЕРОВ ПРИЛОЖЕНИЯ (Глобальный scope)
 # ============================================================================
 HANDLERS: tuple[BaseHandler, ...] = (
+    # Подключение основной машины состояний
+    calendar_conversation,
     # Первичная инициализация пользователя при первом запуске бота
     CommandHandler("start", start),
     # Главная команда вызова интерактивного календаря текущего месяца
     CommandHandler("calendar", calendar_command),
+    # Показывает все встречи пользователя
+    CallbackQueryHandler(handle_show_meetings, pattern=r"^meetings$"),
+    CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"),
     # Навигационные кнопки календаря: переключение месяцев (<< Вперед / Назад >>)
-    # Вынесено из ConversationHandler, так как навигация должна работать всегда, 
+    # Вынесено из ConversationHandler, так как навигация должна работать всегда,
     # независимо от того, находится ли юзер внутри процесса создания/удаления заметок
-    CallbackQueryHandler(handle_calendar_nav_click, pattern=r"^calendar_nav:"), 
-    # Подключение основной машины состояний
-    calendar_conversation,
+    CallbackQueryHandler(handle_calendar_nav_click, pattern=r"^calendar_nav:"),
+    # Глобальный обработчик входящих приглашений (Принять / Отклонить)
+    # Работает всегда и везде, вытаскивает callback_data по паттерну
+    CallbackQueryHandler(handle_invite_response, pattern=r"^invite:(accept|reject):"),
+    # Выгрузка событий пользователя в форматах JSON и CSV
+    CommandHandler(["exportjson", "exportcsv"], handle_export_events),
+    # Получение или просмотр токена для запросов по API
+    CommandHandler(["api_token"], api_token_command),
 )

@@ -1,15 +1,21 @@
-from datetime import datetime
+from django.utils import timezone
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
+
 from app.core.calendar.services import CalendarService
-from app.handlers.calendar_keyboard import generate_calendar_keyboard
+from app.handlers.calendar_keyboard import generate_back_calendar_button, generate_calendar_keyboard
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat and update.effective_user:
         # type: ignore[attr-defined]
         await context.application.user_service.register_visitor(update.effective_user.id)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="Добро пожаловать!")
+
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Добро пожаловать! Нажмите кнопку ниже или введите /calendar, чтобы открыть интерактивный календарь.",
+            reply_markup=generate_back_calendar_button("📅 Открыть календарь"),
+        )
 
 
 async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -21,57 +27,53 @@ async def calendar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not update.effective_chat or not update.effective_user:
         return ConversationHandler.END
 
+    context.user_data.pop("is_editing_date_mode", None)
+    context.user_data.pop("invite_event_id", None)
+    context.user_data.pop("edit_event_id", None)
+
     user_id = update.effective_user.id
 
     # 1. АДАПТИВНОЕ ОПРЕДЕЛЕНИЕ ЦЕЛЕВОЙ ДАТЫ
     # Если вызов прилетел из инлайн-кнопки и в ОЗУ есть ранее выбранная дата
-    if update.callback_query and 'selected_date' in context.user_data:
-        extracted_date = context.user_data['selected_date']
+    if update.callback_query and context.user_data and "selected_date" in context.user_data:
+        extracted_date = context.user_data["selected_date"]
         year = extracted_date.year
         month = extracted_date.month
     else:
         # Падение в дефолт (команда /calendar или чистый запуск)
-        now = datetime.now()
+        now = timezone.now()
         year = now.year
         month = now.month
 
     # 2. ПОЛУЧЕНИЕ ДАННЫХ ИЗ БД
     async with context.application.database.connection() as conn:
         busy_days = await CalendarService.get_user_busy_days(
-            conn=conn,
-            user_id=user_id,
-            year=year,
-            month=month
+            conn=conn, user_id=user_id, year=year, month=month
         )
 
     # Синхронизируем кэш занятых дней в ОЗУ
-    context.user_data['month_busy_days'] = busy_days
+    context.user_data["month_busy_days"] = busy_days
 
     # 3. ГЕНЕРАЦИЯ ИНТЕРФЕЙСА
-    calendar_markup = generate_calendar_keyboard(
-        year=year,
-        month=month,
-        busy_days=busy_days
-    )
+    calendar_markup = generate_calendar_keyboard(year=year, month=month, busy_days=busy_days)
 
-    text_content = "📅 Ваш календарь событий.\n\n Выберите день месяца ниже," \
-    "чтобы посмотреть расписание, добавить новую заметку или изменить существующие дела:"
+    text_content = (
+        "📅 Ваш календарь событий.\n\n Выберите день месяца ниже, "
+        "чтобы посмотреть расписание, добавить новую заметку или изменить существующие дела:"
+    )
 
     # 4. РАЗВЕТВЛЕНИЕ МЕТОДА ОТПРАВКИ
     if update.callback_query:
         # Вызов из инлайн-кнопки (например, "Изменить дату" или после удаления)
         # Редактируем старое сообщение, чтобы интерфейс не прыгал
         await update.callback_query.edit_message_text(
-            text=text_content,
-            reply_markup=calendar_markup
+            text=text_content, reply_markup=calendar_markup
         )
     else:
         # Прямой вызов через текстовую команду /calendar
         # Отправляем новое чистое сообщение в чат
         await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=text_content,
-            reply_markup=calendar_markup
+            chat_id=update.effective_chat.id, text=text_content, reply_markup=calendar_markup
         )
 
     return ConversationHandler.END

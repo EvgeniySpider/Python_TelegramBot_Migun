@@ -1,0 +1,530 @@
+import logging
+
+from django.db.models import Q
+from telegram import Update
+from telegram.error import TelegramError
+from telegram.ext import ContextTypes, ConversationHandler
+from telegram.helpers import escape_markdown
+
+from app.core.calendar.services import check_user_availability
+from app.core.calendar.utils import build_detailed_event_text
+from app.handlers.calendar_keyboard import (
+    generate_back_calendar_button,
+    generate_back_to_menu_button,
+    generate_confirm_invite_keyboard,
+)
+from app.handlers.commands import calendar_command
+from app.handlers.states import (
+    SELECTING_INVITE_EVENT,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID,
+    TYPING_PUBLIC_EVENTS_USER_ID,
+)
+from app.handlers.utils import (
+    get_validated_event_index,
+    is_user_invitee_for_event,
+    validate_telegram_id_input,
+)
+from events.models import Appointment, Event, User
+
+logger = logging.getLogger(__name__)
+
+
+async def handle_invite_event_by_text_number(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """
+    Обрабатывает выбор события для приглашения через текстовый ввод номера (когда задач > 10).
+    Делегирует проверку ввода и вычисление машинного индекса функции get_validated_event_index.
+    При успешной валидации сохраняет ID выбранного события в ОЗУ (invite_event_id)
+    и переводит диалог в режим ожидания ввода Telegram ID гостя.
+
+    Возвращает стейт TYPING_INVITEE_ID при успехе, либо стейт повторного ввода при ошибке.
+    """
+    is_valid, result, event_text_record = await get_validated_event_index(
+        update, context, TYPING_INVITE_NUM
+    )
+
+    if not is_valid:
+        return result
+    index_record = result
+    event_rec = event_text_record[index_record]
+    selected_date = context.user_data.get("selected_date")
+    user_id = update.effective_user.id
+
+    # Защита: проверяем, не является ли юзер гостем на этой встрече
+    is_invitee = await is_user_invitee_for_event(
+        user_id=user_id,
+        selected_date=selected_date,
+        start_time=event_rec.get("start_time"),
+        end_time=event_rec.get("end_time"),
+    )
+    if is_invitee:
+        await update.message.reply_text(
+            "❌ Приглашать участников может только организатор встречи.\n\n"
+            "Пожалуйста, отправьте номер другого события для назначения встречи:"
+        )
+        return TYPING_INVITE_NUM
+
+    context.user_data["invite_event_id"] = event_rec["id"]
+    event_title = event_rec["title"]
+    safe_title = escape_markdown(event_title, version=1)
+
+    text = (
+        f"📌 *Выбрано событие*: {safe_title}\n\n"
+        "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
+    )
+
+    await update.message.reply_text(
+        text=text, reply_markup=generate_back_to_menu_button(), parse_mode="Markdown"
+    )
+    return TYPING_INVITEE_ID
+
+
+async def handle_invite_event_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Обрабатывает выбор события для приглашения через инлайн-кнопку (когда задач <= 10).
+    Извлекает индекс из callback_data, фиксирует целевой ID события в ОЗУ (invite_event_id)
+    и переводит диалог в режим ожидания ввода Telegram ID гостя.
+
+    Возвращает стейт TYPING_INVITEE_ID.
+    """
+    query = update.callback_query
+
+    raw_click_data: str = str(query.data)
+    index_record: int = int(raw_click_data.split(":")[-1])
+
+    event_text_record = context.user_data.get("event_text_record", [])
+    event_rec = event_text_record[index_record]
+    selected_date = context.user_data.get("selected_date")
+    user_id = update.effective_user.id
+
+    # Защита: проверяем, не является ли юзер гостем на этой встрече
+    is_invitee = await is_user_invitee_for_event(
+        user_id=user_id,
+        selected_date=selected_date,
+        start_time=event_rec.get("start_time"),
+        end_time=event_rec.get("end_time"),
+    )
+    if is_invitee:
+        await query.answer(
+            "❌ Приглашать участников может только организатор встречи. Выберите другое событие.",
+            show_alert=False,
+        )
+        return SELECTING_INVITE_EVENT
+
+    await query.answer()
+
+    context.user_data["invite_event_id"] = event_rec["id"]
+    event_title = event_rec["title"]
+    safe_title = escape_markdown(event_title, version=1)
+
+    text = (
+        f"📌 *Выбрано событие*: {safe_title}\n\n"
+        "Пожалуйста, *отправьте Telegram ID* пользователя, которого хотите пригласить:"
+    )
+
+    await query.edit_message_text(
+        text=text, reply_markup=generate_back_to_menu_button(), parse_mode="Markdown"
+    )
+    return TYPING_INVITEE_ID
+
+
+async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Ловит и валидирует Telegram ID приглашаемого (гостя).
+    Проверяет наличие гостя в БД и его занятость.
+    При успехе создает приглашение (status=PENDING) и отправляет гостю сообщение с кнопками Принять/Отклонить.
+    """
+    # Вызываем утилиту валидации
+    is_valid, validation_result = validate_telegram_id_input(
+        input_text=update.message.text,
+        current_user_id=update.effective_user.id,
+        self_error_msg="❌ Вы не можете пригласить самого себя. Введите ID другого пользователя:",
+    )
+
+    if not is_valid:
+        await update.message.reply_text(
+            validation_result, reply_markup=generate_back_to_menu_button()
+        )
+        return TYPING_INVITEE_ID
+
+    invitee_id = validation_result
+
+    event_id = context.user_data.get("invite_event_id")
+    if not event_id:
+        await update.message.reply_text("❗ Сессия устарела. Возвращаю вас в календарь.")
+        return await calendar_command(update, context)
+
+    # 1. Проверяем, существует ли пользователь в базе (Django ORM)
+    user_exists = await User.objects.filter(telegram_id=invitee_id).aexists()
+    if not user_exists:
+        await update.message.reply_text(
+            "❌ Пользователь с таким ID *не зарегистрирован* в нашем боте.\n"
+            "Проверьте ID и попробуйте еще раз:",
+            reply_markup=generate_back_to_menu_button(),
+            parse_mode="Markdown",
+        )
+        return TYPING_INVITEE_ID
+
+    # 2. Достаем целевое событие (событие организатора)
+    target_event = await Event.objects.aget(id=event_id)
+
+    # 3. СНАЧАЛА проверяем: не связывались ли мы уже с этим пользователем по поводу этой встречи
+    existing_appointment = await Appointment.objects.filter(
+        event_id=target_event.id,
+        invitee_id=invitee_id,
+    ).afirst()
+
+    if existing_appointment:
+        if existing_appointment.status == Appointment.Status.CANCELLED:
+            msg = "❌ Этот пользователь ранее отклонил приглашение на данное событие."
+        elif existing_appointment.status == Appointment.Status.CONFIRMED:
+            msg = "✅ Этот пользователь уже принял приглашение и является участником этой встречи."
+        else:  # PENDING
+            msg = "⏳ Вы уже отправляли приглашение этому пользователю на данное событие (ожидает ответа)."
+
+        await update.message.reply_text(
+            msg,
+            reply_markup=generate_back_to_menu_button(),
+        )
+        return TYPING_INVITEE_ID
+
+    # 4. Если человек еще не приглашался — проверяем, свободен ли он по расписанию
+    is_busy = await check_user_availability(invitee_id, target_event)
+
+    if is_busy:
+        await update.message.reply_text(
+            "❗ К сожалению, в это время пользователь *уже занят* (у него запланировано другое событие).\n\n"
+            "Встреча не назначена. Выберите другое время или пригласите кого-то еще.",
+            reply_markup=generate_back_to_menu_button(),
+            parse_mode="Markdown",
+        )
+        return TYPING_INVITEE_ID
+
+    # 5. Пользователь свободен — создаем встречу со статусом PENDING
+    appointment = await Appointment.objects.acreate(
+        event_id=target_event.id,
+        invitee_id=invitee_id,
+        status=Appointment.Status.PENDING,
+    )
+
+    inviter_name = update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
+    date_str = (
+        target_event.event_date.strftime("%d.%m.%Y")
+        if hasattr(target_event.event_date, "strftime")
+        else str(target_event.event_date)
+    )
+
+    if target_event.start_time and target_event.end_time:
+        time_str = f"{target_event.start_time.strftime('%H:%M')} - {target_event.end_time.strftime('%H:%M')}"
+    else:
+        time_str = "Весь день"
+
+    safe_title = escape_markdown(target_event.title, version=1)
+    safe_inviter = escape_markdown(inviter_name, version=1)
+
+    invite_text = (
+        f"🔔 *Новое приглашение!*\n\n"
+        f"{safe_inviter} приглашает вас на событие:\n"
+        f"📌 {safe_title}\n"
+        f"📅 Дата: {date_str}\n"
+        f"⏰ Время: {time_str}\n"
+    )
+
+    if target_event.description:
+        safe_desc = escape_markdown(target_event.description, version=1)
+        if "\n" in safe_desc:
+            invite_text += f"📖 Описание:\n{safe_desc}\n"
+        else:
+            invite_text += f"📖 Описание: {safe_desc}\n"
+
+    invite_text += "\nПримете приглашение?"
+
+    try:
+        # Организатор (inviter) отправляет приглашение гостю (invitee)
+        await context.bot.send_message(
+            chat_id=invitee_id,
+            text=invite_text,
+            reply_markup=generate_confirm_invite_keyboard(appointment.id),
+            parse_mode="Markdown",
+        )
+        # Отчитываемся организатору об успехе
+        await update.message.reply_text(
+            f"✅ Приглашение успешно создано!\n"
+            f"Пользователю *{invitee_id}* отправлено уведомление для подтверждения.",
+            reply_markup=generate_back_to_menu_button(),
+            parse_mode="Markdown",
+        )
+    except TelegramError:
+        # Гость заблокировал бота
+        await update.message.reply_text(
+            "❗ Не удалось отправить приглашение. Возможно, пользователь заблокировал бота или ни разу его не запускал.",
+            reply_markup=generate_back_to_menu_button(),
+        )
+        await appointment.adelete()
+
+    return TYPING_INVITEE_ID
+
+
+async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Обрабатывает нажатие кнопок Принять/Отклонить гостем (invitee) в сообщении-приглашении.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    # Разбираем callback_data (пример: "invite:accept:15")
+    _, action, appointment_id_str = query.data.split(":")
+    appointment_id = int(appointment_id_str)
+
+    try:
+        # Достаем встречу вместе с объектом события через JOIN
+        appointment = await Appointment.objects.select_related("event").aget(id=appointment_id)
+    except Appointment.DoesNotExist:
+        await query.edit_message_text("❗ Это приглашение больше не существует или было отменено.")
+        return
+
+    # Защита от повторного нажатия кнопок
+    if appointment.status != Appointment.Status.PENDING:
+        await query.edit_message_text("ℹ️ Вы уже дали ответ на это приглашение.")
+        return
+
+    inviter_id = appointment.event.user_id
+    original_event = appointment.event
+
+    # Экранируем название события для безопасного вывода в Markdown
+    safe_title = escape_markdown(original_event.title, version=1)
+
+    if action == "accept":
+        # 1. Повторная валидация времени гостя
+        is_busy = await check_user_availability(query.from_user.id, appointment.event)
+
+        if is_busy:
+            appointment.status = Appointment.Status.CANCELLED
+            await appointment.asave()
+
+            await query.edit_message_text(
+                "❗ Вы не можете принять приглашение: на это время у вас уже запланировано другое событие."
+            )
+
+            try:
+                await context.bot.send_message(
+                    chat_id=inviter_id,
+                    text=f"⚠️ Пользователь *{query.from_user.id}* попытался принять приглашение на событие {safe_title}, но это время у него уже занято другим делом.",
+                    parse_mode="Markdown",
+                )
+            except TelegramError:
+                pass
+            return
+
+        # 2. Подтверждаем встречу в промежуточной таблице
+        appointment.status = Appointment.Status.CONFIRMED
+        await appointment.asave()
+
+        guest_description = f"🤝 Встреча с пользователем {inviter_id}."
+        if original_event.description:
+            if "\n" in original_event.description:
+                guest_description += f"\n📝 Оригинальное описание:\n{original_event.description}"
+            else:
+                guest_description += f"\n📝 Оригинальное описание: {original_event.description}"
+
+        # 3. Создаем физическую копию для гостя
+        await Event.objects.acreate(
+            user_id=query.from_user.id,
+            event_type=original_event.event_type,
+            title=f"Встреча: {original_event.title}"[:255],
+            description=guest_description,
+            event_date=original_event.event_date,
+            start_time=original_event.start_time,
+            end_time=original_event.end_time,
+        )
+
+        # 4. Меняем сообщение у гостя (безопасный safe_title)
+        success_text = f"✅ Вы *приняли* приглашение на событие: {safe_title}"
+        await query.edit_message_text(text=success_text, parse_mode="Markdown")
+
+        # 5. Уведомляем организатора (inviter) о решении гостя (безопасный safe_title)
+        try:
+            await context.bot.send_message(
+                chat_id=inviter_id,
+                text=f"✅ Пользователь *{query.from_user.id}* принял ваше приглашение на событие {safe_title}.",
+                parse_mode="Markdown",
+            )
+        except TelegramError as e:
+            logger.warning(f"Не удалось уведомить организатора {inviter_id} о принятии: {e}")
+            await query.edit_message_text(
+                text=f"{success_text}\n\n*Внимание:* Организатор не получил уведомление (возможно, он заблокировал бота).",
+                parse_mode="Markdown",
+            )
+
+    elif action == "reject":
+        # Безопасный safe_title при отказе
+        reject_text = f"❌ Вы *отказались* от приглашения на событие: {safe_title}"
+        await query.edit_message_text(text=reject_text, parse_mode="Markdown")
+
+        # Уведомляем организатора (inviter) об отказе гостя (безопасный safe_title)
+        try:
+            await context.bot.send_message(
+                chat_id=inviter_id,
+                text=f"❌ Пользователь *{query.from_user.id}* отказался от приглашения на событие {safe_title}.",
+                parse_mode="Markdown",
+            )
+        except TelegramError as e:
+            logger.warning(f"Не удалось уведомить организатора {inviter_id} об отказе: {e}")
+            await query.edit_message_text(
+                text=f"{reject_text}\n\n*Внимание:* Организатор не получил уведомление (возможно, он заблокировал бота).",
+                parse_mode="Markdown",
+            )
+
+        appointment.status = Appointment.Status.CANCELLED
+        await appointment.asave()
+
+
+async def handle_show_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    telegram_id = query.from_user.id
+
+    # 1. Забираем ВСЕ встречи за один поход в БД
+    meetings: list[Appointment] = [
+        meeting
+        async for meeting in Appointment.objects.select_related("event").filter(
+            Q(event__user_id=telegram_id) | Q(invitee_id=telegram_id)
+        )
+    ]
+
+    # Встречи, которые назначил Я
+    my_invites = [m for m in meetings if m.event.user_id == telegram_id]
+    # Встречи, на которые пригласили МЕНЯ
+    invites_to_me = [m for m in meetings if m.invitee_id == telegram_id]
+
+    # === БЛОК 1: Мои приглашения ===
+    if my_invites:
+        text_my = "*🤝 Назначенные мною встречи:*\n\n"
+        for i, meeting in enumerate(my_invites, 1):
+            event = meeting.event
+            date_str = event.event_date.strftime("%d.%m.%Y")
+
+            # Проверка на тип события (может не быть start_time, если ALL_DAY)
+            if event.start_time and event.end_time:
+                time_str = (
+                    f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+                )
+            else:
+                time_str = "Весь день"
+
+            status = meeting.get_status_display()
+
+            safe_title = escape_markdown(event.title, version=1)
+            text_my += (
+                f"*{i}*. {safe_title}\n"
+                f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
+                f"👤 Приглашенный: ID {meeting.invitee_id}\n"
+                f"📊 Статус: {status}\n\n"
+            )
+    else:
+        text_my = "*🤝 Назначенные мною встречи:*\nВы никого не приглашали.\n\n"
+
+    # === БЛОК 2: Приглашения для меня ===
+    if invites_to_me:
+        text_others = "*📩 Приглашения для меня:*\n\n"
+        for i, meeting in enumerate(invites_to_me, 1):
+            event = meeting.event
+            date_str = event.event_date.strftime("%d.%m.%Y")
+
+            if event.start_time and event.end_time:
+                time_str = (
+                    f"{event.start_time.strftime('%H:%M')} - {event.end_time.strftime('%H:%M')}"
+                )
+            else:
+                time_str = "Весь день"
+
+            status = meeting.get_status_display()
+
+            safe_title = escape_markdown(event.title, version=1)
+            text_others += (
+                f"*{i}*. {safe_title}\n"
+                f"📅 Дата: {date_str} | ⏰ Время: {time_str}\n"
+                f"👑 Организатор: ID {event.user_id}\n"
+                f"📊 Статус: {status}\n\n"
+            )
+    else:
+        text_others = "*📩 Приглашения для меня:*\nВас никто не приглашал.\n"
+
+    # Склеивание результата
+    final_text = f"{text_my}➖➖➖➖➖➖➖➖➖➖\n{text_others}"
+
+    await query.edit_message_text(
+        text=final_text, parse_mode="Markdown", reply_markup=generate_back_calendar_button()
+    )
+
+
+async def handle_ask_telegram_id_for_public_events(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    query = update.callback_query
+
+    text = "Отправьте *Telegram ID* пользователя, события которого хотите посмотреть:"
+
+    await query.edit_message_text(
+        text=text, parse_mode="Markdown", reply_markup=generate_back_calendar_button()
+    )
+    return TYPING_PUBLIC_EVENTS_USER_ID
+
+
+async def handle_show_public_events_another_user(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    # Вызываем утилиту валидации
+    is_valid, validation_result = validate_telegram_id_input(
+        input_text=update.message.text,
+        current_user_id=update.effective_user.id,
+        self_error_msg="❌ В этом меню Вы не можете смотреть свои заметки. Введите ID другого пользователя:",
+    )
+
+    if not is_valid:
+        await update.message.reply_text(validation_result)
+        return TYPING_PUBLIC_EVENTS_USER_ID
+
+    telegram_id_another_user = validation_result
+
+    public_events = Event.objects.filter(user_id=telegram_id_another_user, is_public=True).order_by(
+        "event_date", "start_time"
+    )
+
+    if not await public_events.aexists():
+        await update.message.reply_text(
+            "❌ У пользователя с таким Telegram ID нет публичных событий.",
+            reply_markup=generate_back_calendar_button(),
+        )
+        return TYPING_PUBLIC_EVENTS_USER_ID
+
+    events_dicts = [
+        {
+            "title": event.title,
+            "start_time": event.start_time,
+            "end_time": event.end_time,
+            "description": event.description,
+            "is_public": event.is_public,
+            "event_date": event.event_date,
+        }
+        async for event in public_events
+    ]
+
+    text_blocks = [f"🌐 *Публичные события пользователя {telegram_id_another_user}:*\n"]
+
+    for idx in range(len(events_dicts)):
+        text_blocks.append(
+            build_detailed_event_text(events_dicts, index=idx, numbered=True, is_show_date=True)
+        )
+
+    final_text = "\n".join(text_blocks)
+
+    if len(final_text) > 4000:
+        final_text = final_text[:4000] + "\n\n... (показана только часть событий)"
+
+    await update.message.reply_text(
+        text=final_text, parse_mode="Markdown", reply_markup=generate_back_calendar_button()
+    )
+
+    return ConversationHandler.END

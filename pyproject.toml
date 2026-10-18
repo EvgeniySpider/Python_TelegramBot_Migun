@@ -12,7 +12,11 @@ dependencies = [
     "python-telegram-bot>=21.0,<22.0",
     "pydantic-settings>=2.0.0,<3.0.0",
     "psycopg2-binary>=2.9.0,<3.0.0",
-    "asyncpg>=0.29.0,<0.32.0"
+    "asyncpg>=0.29.0,<0.32.0",
+    "django (>=6.1.1,<7.0.0)",
+    "django-environ (>=0.14.0,<0.15.0)",
+    "djangorestframework (>=3.18.1,<4.0.0)",
+    "requests (>=2.34.2,<3.0.0)"
 ]
 
 
@@ -22,14 +26,65 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 package-mode = false
+
 [dependency-groups]
 dev = [
     "mypy (>=2.1.0,<3.0.0)",
-    "asyncpg-stubs (>=0.31.2,<0.32.0)"
+    "asyncpg-stubs (>=0.31.2,<0.32.0)",
+    "pytest (>=9.1.1,<10.0.0)",
+    "pytest-django (>=4.14.0,<5.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    "ruff (>=0.17.0,<0.18.0)"
 ]
 
 [tool.mypy]
+python_version = "3.12"
 explicit_package_bases = true
+# Игнорировать библиотеки без стабов (Django, DRF, environ, psycopg2)
+ignore_missing_imports = true
+# Никогда не проверять автосгенерированные миграции
+exclude = [
+    ".*/migrations/.*"
+]
 plugins = [
     "pydantic.mypy"
 ]
+
+# 1. Разрешаем не типизировать внутренности функций в тестах
+[[tool.mypy.overrides]]
+module = "tests.*"
+check_untyped_defs = false
+
+# 2. Заглушаем шум Telegram в хэндлерах (None, user_data, custom application)
+[[tool.mypy.overrides]]
+module = "app.handlers.*"
+disable_error_code = ["union-attr", "attr-defined", "index", "arg-type"]
+
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "core.settings"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+filterwarnings = [
+    "ignore::telegram.warnings.PTBUserWarning",
+]
+
+[tool.ruff]
+# Целевая версия Python (у нас 3.12)
+target-version = "py312"
+# Длина строки
+line-length = 100
+# Исключаем автогенерированные миграции Django
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# E, W - ошибки и предупреждения PEP 8
+# F - Pyflakes (неиспользуемые переменные, ошибки импортов)
+# I - isort (идеальная сортировка импортов)
+# UP - pyupgrade (современный синтаксис Python 3.12)
+# B - flake8-bugbear (потенциальные скрытые баги)
+select = ["E", "W", "F", "I", "UP", "B"]
+ignore = ["E501"]  # Игнорировать длину строки в комментариях/строках, если ruff format сам не перенёс
+
+[tool.ruff.lint.isort]
+# Чтобы понимал, какие пакеты локальные для нашего проекта
+known-first-party = ["app", "api", "events", "core", "settings"]

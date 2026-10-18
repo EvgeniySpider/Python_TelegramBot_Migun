@@ -2,6 +2,8 @@ from telegram import CallbackQuery, Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.helpers import escape_markdown
 
+from app.core.calendar.repositories import CalendarRepository
+from app.core.calendar.services import CalendarService
 from app.core.calendar.utils import build_detailed_event_text, build_events_list_text
 from app.handlers.calendar_callbacks import (
     handle_options_with_exist_notes_in_day,
@@ -12,12 +14,14 @@ from app.handlers.calendar_keyboard import (
     generate_confirm_keyboard,
     generate_edit_fields_keyboard,
     generate_numbered_action_keyboard,
+    generate_time_options_keyboard,
 )
 from app.handlers.commands import calendar_command
 from app.handlers.states import (
     CHOOSING_ACTION,
     CHOOSING_EDIT_FIELD,
     CHOOSING_EVENT_TO_DELETE,
+    CHOOSING_TIME,
     CONFIRMING_DELETE,
     SELECTING_EDIT_EVENT,
     SELECTING_INVITE_EVENT,
@@ -319,13 +323,50 @@ async def handle_delete_event_by_number(update: Update, context: ContextTypes.DE
 
 async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     selected_date = context.user_data.get("selected_date")
-    event_text_record = context.user_data.get("event_text_record")
 
     # Защита от протухшей сессии / перезапуска бота
-    if not selected_date or event_text_record is None:
+    if not selected_date or not update.effective_user:
         await calendar_command(update, context)
         return ConversationHandler.END
 
+    user_id = update.effective_user.id
+
+    # 1. СИНХРОНИЗИРУЕМ И СПИСОК СОБЫТИЙ, И КАРТУ ЗАНЯТОСТИ МЕСЯЦА:
+    async with context.application.database.connection() as conn:
+        event_text_record = await CalendarRepository.get_events_by_date(
+            conn, user_id, selected_date
+        )
+        busy_days = await CalendarService.get_user_busy_days(
+            conn=conn, user_id=user_id, year=selected_date.year, month=selected_date.month
+        )
+
+    # Обновляем оба кэша в ОЗУ:
+    context.user_data["event_text_record"] = event_text_record
+    context.user_data["month_busy_days"] = busy_days
+
+    source = update.callback_query if update.callback_query else update
+    header = context.user_data.pop("edit_success_status", "")
+
+    # 2. Если через API удалили ВСЕ события дня — переключаем экран на чистый выбор времени
+    if not event_text_record:
+        events_text = "На этот день ничего не запланировано.\n"
+        if hasattr(source, "edit_message_text"):
+            return await handle_time_selection_option(
+                (source, selected_date.day, selected_date.month, selected_date.year),
+                events_text,
+                is_adding=False,
+            )
+        else:
+            await source.message.reply_text(
+                text=f"📅 *Выбранная дата*: {selected_date.day:02d}.{selected_date.month:02d}.{selected_date.year}\n\n"
+                f"{events_text}"
+                f"Укажите формат времени проведения события:",
+                reply_markup=generate_time_options_keyboard(is_adding=False),
+                parse_mode="Markdown",
+            )
+            return CHOOSING_TIME
+
+    # 3. Если события в дне ещё остались — показываем карточки
     event_count = len(event_text_record)
     cards = [
         build_detailed_event_text(event_text_record, index=i, numbered=True)
@@ -333,9 +374,8 @@ async def handle_back_to_day_menu_click(update: Update, context: ContextTypes.DE
     ]
     events_text = "\n".join(cards) + "\n"
 
-    source = update.callback_query if update.callback_query else update
-    header = context.user_data.pop("edit_success_status", "")
-
     return await handle_options_with_exist_notes_in_day(
-        events_text, (source, selected_date.day, selected_date.month, selected_date.year), header=header
+        events_text,
+        (source, selected_date.day, selected_date.month, selected_date.year),
+        header=header,
     )

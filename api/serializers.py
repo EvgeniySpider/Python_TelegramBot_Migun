@@ -29,7 +29,8 @@ class PublicEventSerializer(ModelSerializer):
 
 class EventSerializer(ModelSerializer):
     """
-    Полный сериализатор для работы с собственными событиями пользователя (CRUD).
+    Сериализатор для создания (POST) и чтения (GET) личных событий пользователя.
+    Обновление (PUT/PATCH) вынесено в EventUpdateSerializer.
     """
 
     # Добавляем человекочитаемое отображение типа события (только для чтения)
@@ -50,8 +51,7 @@ class EventSerializer(ModelSerializer):
             "is_public",
             "created_at",
         ]
-        # Защищаем системные поля от изменения при POST/PUT запросах.
-        # Поле user заполняется автоматически во вьюхе (perform_create).
+        # Поле user заполняется автоматически во вьюхе (perform_create)
         read_only_fields = ["id", "user", "created_at"]
 
     def validate(self, attrs: dict) -> dict:
@@ -139,9 +139,18 @@ class EventSerializer(ModelSerializer):
     def to_representation(self, instance: Event):
         """Перехватываем готовый JSON перед отправкой и добавляем уведомление."""
         data = super().to_representation(instance)
-        # Если событие EXACT и время было обрезано, добавляем поле warning
-        if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
-            data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+        request = self.context.get("request")
+
+        # Добавляем warning ТОЛЬКО при создании, исключая GET-запросы
+        if request and request.method == "POST":
+            # Если событие EXACT и время было обрезано, добавляем поле warning
+           if (
+                instance.event_type == Event.EventType.EXACT
+                and instance.start_time
+                and instance.start_time > time(23, 29)
+            ):
+                data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+        
         return data
 
 
@@ -271,6 +280,11 @@ class EventUpdateSerializer(ModelSerializer):
 
     def to_representation(self, instance: Event):
         data = super().to_representation(instance)
-        if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
-            data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+        request = self.context.get("request")
+
+        # Добавляем warning ТОЛЬКО при изменении, исключая случайные чтения
+        if request and request.method in ("PUT", "PATCH"):
+            if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
+                data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
+        
         return data

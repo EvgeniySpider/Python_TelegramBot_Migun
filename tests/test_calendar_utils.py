@@ -196,7 +196,7 @@ async def test_notify_and_cancel_appointments_no_roles(mock_Appointment, mock_Ev
     # Мокаем удаляемое событие
     mock_event = MagicMock()
     mock_event.id = 10
-    mock_event.title = 'Название события'
+    mock_event.title = "Название события"
     mock_event.event_date = date(2026, 10, 20)
     mock_event.start_time = time(10, 0)
     mock_event.end_time = time(11, 0)
@@ -292,7 +292,7 @@ async def test_notify_and_cancel_appointments_as_child(mock_Appointment, mock_Ev
     # Локальная заметка ребенка
     mock_event = MagicMock()
     mock_event.id = 10
-    mock_event.title = 'Название события'
+    mock_event.title = "Название события"
     mock_event.event_date = date(2026, 10, 20)
     mock_event.start_time = None  # Проверим как отрабатывает "Весь день"
 
@@ -379,7 +379,7 @@ def test_validate_telegram_id_input(
 async def test_get_organizer_edit_error_message(
     mock_appointment: MagicMock,
     active_status: Appointment.Status | None,
-    expected_error_fragment: str | None
+    expected_error_fragment: str | None,
 ):
     # Динамически возвращаем True только для того статуса, который тестируем
     def fake_filter(event_id: int, status: str):

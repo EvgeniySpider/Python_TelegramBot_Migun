@@ -1,4 +1,4 @@
-from datetime import time, date
+from datetime import date, time
 
 import pytest
 from django.urls import reverse

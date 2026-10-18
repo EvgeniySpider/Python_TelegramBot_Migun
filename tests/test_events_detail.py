@@ -306,7 +306,7 @@ def test_patch_move_interval_to_date_with_all_day_collision(
     где у пользователя уже запланировано событие 'all_day'.
     """
     target_date = date.today() + timedelta(days=1)
-    
+
     # Создаем событие на весь день на целевую дату (завтра)
     Event.objects.create(
         user=test_user,
@@ -336,7 +336,7 @@ def test_patch_move_all_day_to_busy_date_collision(
     где уже есть ЛЮБЫЕ другие события пользователя.
     """
     target_date = date.today() + timedelta(days=1)
-    
+
     # Создаем обычное точечное событие на целевую дату (завтра)
     Event.objects.create(
         user=test_user,

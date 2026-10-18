@@ -288,7 +288,7 @@ async def _save_event_to_db(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if description:
         safe_desc = escape_markdown(description, version=1)
-        if '\n' in safe_desc:
+        if "\n" in safe_desc:
             report_text += f"📝 Описание:\n{safe_desc}\n"
         else:
             report_text += f"📝 Описание: {safe_desc}\n"

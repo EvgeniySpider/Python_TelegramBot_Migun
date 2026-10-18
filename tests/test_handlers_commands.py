@@ -136,9 +136,11 @@ async def test_calendar_command_text_command(mock_calendar_keyboard, mock_busy_d
 
 
 @pytest.mark.asyncio
-@patch('app.handlers.commands.CalendarService.get_user_busy_days')
-@patch('app.handlers.commands.generate_calendar_keyboard')
-async def test_calendar_command_clears_fsm_flags(mock_calendar_keyboard: MagicMock, mock_busy_days: AsyncMock):
+@patch("app.handlers.commands.CalendarService.get_user_busy_days")
+@patch("app.handlers.commands.generate_calendar_keyboard")
+async def test_calendar_command_clears_fsm_flags(
+    mock_calendar_keyboard: MagicMock, mock_busy_days: AsyncMock
+):
     """
     Проверяет, что вызов корня календаря сжигает все временные флаги машины состояний,
     предотвращая утечку контекста при экстренном прерывании диалогов.
@@ -146,22 +148,24 @@ async def test_calendar_command_clears_fsm_flags(mock_calendar_keyboard: MagicMo
     update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.effective_user.id = 12345
     update_mock.callback_query = None  # Имитируем текстовый ввод команды /calendar
-    
+
     # Делаем send_message асинхронным моком
     context_mock.bot.send_message = AsyncMock()
-    
+
     # Мокаем БД
     connection_mock = MagicMock()
-    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+    context_mock.application.database.connection.return_value.__aenter__.return_value = (
+        connection_mock
+    )
 
     # Забиваем "оперативку" пользователя мусором от различных FSM-диалогов
     context_mock.user_data = {
         "is_editing_date_mode": True,
         "invite_event_id": 999,
         "edit_event_id": 777,
-        "selected_date": date(2026, 10, 15)  # Используем правильный date
+        "selected_date": date(2026, 10, 15),  # Используем правильный date
     }
-    
+
     mock_busy_days.return_value = {}
 
     # ВЫЗОВ ХЭНДЛЕРА
@@ -169,14 +173,14 @@ async def test_calendar_command_clears_fsm_flags(mock_calendar_keyboard: MagicMo
 
     # ПРОВЕРКИ
     assert result == ConversationHandler.END
-    
+
     # Убеждаемся, что все временные флаги уничтожены
     assert "is_editing_date_mode" not in context_mock.user_data
     assert "invite_event_id" not in context_mock.user_data
     assert "edit_event_id" not in context_mock.user_data
-    
+
     # Убеждаемся, что полезная дата не пострадала
     assert context_mock.user_data.get("selected_date") == date(2026, 10, 15)
-    
+
     # Убеждаемся, что бот реально отправил сообщение
     context_mock.bot.send_message.assert_awaited_once()

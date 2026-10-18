@@ -89,7 +89,7 @@ class CalendarRepository:
         column_name: str,  # Сюда передаем строго строку "id" или "event_date"
         # Сюда передаем конкретный int (ID) или datetime.date
         value: int | datetime.datetime,
-        user_id: int
+        user_id: int,
     ):
         # Валидация для защиты от SQL-инъекций (перфекционизм и безопасность!)
         if column_name not in ("id", "event_date"):
@@ -101,7 +101,6 @@ class CalendarRepository:
         # Извлечение числа с помощью split
         # "DELETE 5".split() -> ["DELETE", "5"] -> int("5") = 5
         return int(result.split()[-1])
-
 
     @staticmethod
     async def toggle_event_privacy(conn: asyncpg.Connection, event_id: int) -> None:

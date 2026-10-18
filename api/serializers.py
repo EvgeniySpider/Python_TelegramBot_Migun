@@ -144,13 +144,13 @@ class EventSerializer(ModelSerializer):
         # Добавляем warning ТОЛЬКО при создании, исключая GET-запросы
         if request and request.method == "POST":
             # Если событие EXACT и время было обрезано, добавляем поле warning
-           if (
+            if (
                 instance.event_type == Event.EventType.EXACT
                 and instance.start_time
                 and instance.start_time > time(23, 29)
             ):
                 data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
-        
+
         return data
 
 
@@ -217,7 +217,7 @@ class EventUpdateSerializer(ModelSerializer):
                 event_type = Event.EventType.EXACT
             else:
                 event_type = Event.EventType.INTERVAL
-            
+
             # Обязательно обновляем attrs, чтобы сериализатор сохранил новый тип в БД
             attrs["event_type"] = event_type
         # ---------------------------------------------------------
@@ -286,5 +286,5 @@ class EventUpdateSerializer(ModelSerializer):
         if request and request.method in ("PUT", "PATCH"):
             if instance.event_type == Event.EventType.EXACT and instance.start_time > time(23, 29):
                 data["warning"] = "Время > 23:29, поэтому время окончания было установлено 23:59"
-        
+
         return data

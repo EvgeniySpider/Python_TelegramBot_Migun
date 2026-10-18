@@ -23,7 +23,6 @@ from app.handlers.states import (
     TYPING_INVITE_NUM,
     TYPING_INVITEE_ID,
 )
-from events.models import Appointment
 
 
 @pytest.mark.asyncio
@@ -151,9 +150,7 @@ async def test_handle_options_click_edit_one_event_is_organizer(
     # Пользователь НЕ является приглашенным
     mock_is_invitee.return_value = False
     # Пользователь является организатором
-    error_msg = (
-        "❌ На это мероприятие у вас назначена встреча, вы не можете её редактировать. Её можно только удалить."
-    )
+    error_msg = "❌ На это мероприятие у вас назначена встреча, вы не можете её редактировать. Её можно только удалить."
     mock_get_organizer.return_value = error_msg
 
     update_mock, context_mock = AsyncMock(), MagicMock()
@@ -180,17 +177,15 @@ async def test_handle_options_click_edit_one_event_is_organizer(
     assert result == CHOOSING_ACTION
 
     mock_is_invitee.assert_awaited_once_with(
-        user_id = 12345,
-        selected_date = date(2026, 10, 20),
-        start_time = time(12, 0),
-        end_time = time(13, 0)
+        user_id=12345,
+        selected_date=date(2026, 10, 20),
+        start_time=time(12, 0),
+        end_time=time(13, 0),
     )
 
     mock_get_organizer.assert_awaited_once_with(102)
 
-    update_mock.callback_query.answer.assert_awaited_once_with(
-        error_msg, show_alert=False
-    )
+    update_mock.callback_query.answer.assert_awaited_once_with(error_msg, show_alert=False)
     arg = update_mock.callback_query.answer.call_args.args[0]
     assert "На это мероприятие у вас назначена встреча, вы не можете её редактировать" in arg
 

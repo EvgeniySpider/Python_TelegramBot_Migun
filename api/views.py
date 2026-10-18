@@ -115,7 +115,9 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         # ==========================================
         # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
         # ==========================================
-        hosted_appointments = Appointment.objects.filter(event=instance, status=Appointment.Status.CONFIRMED)
+        hosted_appointments = Appointment.objects.filter(
+            event=instance, status=Appointment.Status.CONFIRMED
+        )
 
         if hosted_appointments.exists():
             for appt in hosted_appointments:
@@ -132,7 +134,7 @@ class UserEventDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
                 # Удаляем саму запись о встрече
                 appt.delete()
-                
+
                 msg = (
                     f"❌ *Отмена встречи*\n\n"
                     f"Организатор (ID: `{user.telegram_id}`) отменил мероприятие:\n"

@@ -57,7 +57,7 @@ async def is_user_invitee_for_event(
 
     return await Appointment.objects.filter(
         invitee_id=user_id,
-        status = Appointment.Status.CONFIRMED,
+        status=Appointment.Status.CONFIRMED,
         event__event_date=selected_date,
         event__start_time=start_time,
         event__end_time=end_time,
@@ -109,7 +109,9 @@ async def notify_and_cancel_appointments(
         # СЦЕНАРИЙ А: Пользователь — ОРГАНИЗАТОР
         # ==========================================
         # Ищем все встречи, привязанные к этому конкретному событию
-        hosted_appointments = Appointment.objects.filter(event_id=local_event.id, status=Appointment.Status.CONFIRMED)
+        hosted_appointments = Appointment.objects.filter(
+            event_id=local_event.id, status=Appointment.Status.CONFIRMED
+        )
         safe_organizer_title = escape_markdown(local_event.title, version=1)
 
         # Если такие есть, значит мы удаляем оригинал
@@ -171,8 +173,9 @@ async def notify_and_cancel_appointments(
                 await bot.send_message(chat_id=organizer_id, text=msg, parse_mode="Markdown")
             except TelegramError as e:
                 logger.warning(f"Ошибка отправки уведомления организатору {organizer_id}: {e}")
-                
+
         await Appointment.objects.filter(event_id=local_event.id).adelete()
+
 
 def validate_telegram_id_input(
     input_text: str, current_user_id: int, self_error_msg: str

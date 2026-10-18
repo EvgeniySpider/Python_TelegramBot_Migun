@@ -1,7 +1,7 @@
 import asyncpg
 
 from app.core.calendar.repositories import CalendarRepository
-from events.models import Appointment, Event
+from events.models import Event
 
 
 class CalendarService:

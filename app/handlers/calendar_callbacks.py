@@ -2,8 +2,8 @@ import datetime
 
 import asyncpg
 from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler
 from telegram.error import BadRequest
+from telegram.ext import ContextTypes, ConversationHandler
 
 from app.core.calendar.repositories import CalendarRepository
 from app.core.calendar.services import CalendarService
@@ -170,7 +170,7 @@ async def handle_calendar_nav_click(update: Update, context: ContextTypes.DEFAUL
         month=target_month,
         busy_days=busy_days,
         editing_day=editing_day,
-        is_back_button=is_editing
+        is_back_button=is_editing,
     )
 
     # 7. Обновляем исключительно инлайн-сетку кнопок под сообщением, избегая мерцания текста

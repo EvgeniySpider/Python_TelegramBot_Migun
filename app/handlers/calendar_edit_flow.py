@@ -18,8 +18,11 @@ from app.handlers.states import (
     TYPING_EDIT_TIME,
     TYPING_EDIT_TITLE,
 )
-from app.handlers.utils import get_organizer_edit_error_message, get_validated_event_index, is_user_invitee_for_event
-from events.models import Appointment
+from app.handlers.utils import (
+    get_organizer_edit_error_message,
+    get_validated_event_index,
+    is_user_invitee_for_event,
+)
 
 
 # --- КЛИК ПО КНОПКАМ ВЫБОРА ПОЛЯ ---
@@ -454,7 +457,7 @@ async def back_to_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         context.user_data.pop("is_editing_date_mode", None)  # Чистим мусор через pop
 
     # Восстанавливаем кэш занятости для ИСХОДНОГО месяца!
-    # Если мы листали месяцы во время попытки сменить дату, в month_busy_days 
+    # Если мы листали месяцы во время попытки сменить дату, в month_busy_days
     # остались чужие дни. Синхронизируем их обратно с selected_date.
     if "selected_date" in context.user_data:
         selected_date = context.user_data["selected_date"]

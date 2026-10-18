@@ -231,15 +231,15 @@ async def test_handle_calendar_nav_click(
         ("calendar_nav:2026:11", True, None, True),
         # 3. Тот же месяц (Октябрь), но обычный режим просмотра -> кружка БЫТЬ НЕ ДОЛЖНО
         ("calendar_nav:2026:10", False, None, False),
-    ]
+    ],
 )
-@patch('app.handlers.calendar_callbacks.CalendarService.get_user_busy_days')
+@patch("app.handlers.calendar_callbacks.CalendarService.get_user_busy_days")
 async def test_handle_calendar_nav_click_editing_day_restoration(
     mock_get_busy_days: AsyncMock,
     nav_data: str,
     is_editing: bool,
     expected_circle_text: str | None,
-    expected_back_btn: bool
+    expected_back_btn: bool,
 ):
     """
     Проверяет логику восстановления индикатора выбранного дня (белого кружка)
@@ -248,10 +248,12 @@ async def test_handle_calendar_nav_click_editing_day_restoration(
     update_mock, context_mock = AsyncMock(), MagicMock()
     update_mock.callback_query.data = nav_data
     update_mock.effective_user.id = 111
-    
+
     # Мокаем БД
     connection_mock = MagicMock()
-    context_mock.application.database.connection.return_value.__aenter__.return_value = connection_mock
+    context_mock.application.database.connection.return_value.__aenter__.return_value = (
+        connection_mock
+    )
 
     # В памяти лежит дата, с которой мы переносим событие: 15 октября 2026 года
     context_mock.user_data = {
@@ -259,17 +261,17 @@ async def test_handle_calendar_nav_click_editing_day_restoration(
     }
     if is_editing:
         context_mock.user_data["is_editing_date_mode"] = True
-        
+
     mock_get_busy_days.return_value = {}
-    
+
     # ВЫЗОВ ХЭНДЛЕРА
     await handle_calendar_nav_click(update_mock, context_mock)
-    
+
     #  ПРОВЕРЯЕМ РЕАЛЬНУЮ КЛАВИАТУРУ
     update_mock.callback_query.edit_message_reply_markup.assert_awaited_once()
     kwargs = update_mock.callback_query.edit_message_reply_markup.call_args.kwargs
     markup: InlineKeyboardMarkup = kwargs["reply_markup"]
-    
+
     # Собираем тексты всех кнопок в плоский список
     all_buttons_text = [btn.text for row in markup.inline_keyboard for btn in row]
 
@@ -278,14 +280,16 @@ async def test_handle_calendar_nav_click_editing_day_restoration(
     # Проверка белого кружка
     if expected_circle_text:
         assert expected_circle_text == all_buttons_text[white_circle_index]
-        
+
     else:
         assert "⚪ 15" not in all_buttons_text
-        
+
     # Проверка кнопки "Назад" (на основе callback_data)
-    has_back_button = any(btn.callback_data == "back_to_edit_menu" for row in markup.inline_keyboard for btn in row)
+    has_back_button = any(
+        btn.callback_data == "back_to_edit_menu" for row in markup.inline_keyboard for btn in row
+    )
     assert has_back_button == expected_back_btn
-    
+
     # В режиме редактирования кнопок "Встречи" и "Общие события" быть не должно
     if expected_back_btn:
         assert "🤝 Встречи" not in all_buttons_text

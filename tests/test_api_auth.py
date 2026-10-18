@@ -2,12 +2,12 @@ from datetime import timedelta
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-from django.utils import timezone
 
-from events.models import User
 from app.main import settings
+from events.models import User
 
 
 @pytest.mark.django_db
@@ -20,7 +20,7 @@ def test_authentication_success(api_client: APIClient, test_user: User):
     url = reverse("api:private-events-list")
     # Передаем реальный заголовок, как это сделает фронтенд
     response = api_client.get(url, HTTP_AUTHORIZATION="Token valid_secret_token")
-    
+
     assert response.status_code == status.HTTP_200_OK
 
 
@@ -35,7 +35,7 @@ def test_authentication_expired_token(api_client: APIClient, test_user: User):
 
     url = reverse("api:private-events-list")
     response = api_client.get(url, HTTP_AUTHORIZATION="Token expired_secret_token")
-    
+
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
@@ -45,5 +45,5 @@ def test_authentication_invalid_header_format(api_client: APIClient, test_user: 
     url = reverse("api:private-events-list")
     # Например, просто передали токен без префикса Token/Bearer
     response = api_client.get(url, HTTP_AUTHORIZATION="just_token_without_prefix")
-    
+
     assert response.status_code == status.HTTP_403_FORBIDDEN

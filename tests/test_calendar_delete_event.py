@@ -126,8 +126,7 @@ async def test_handle_delete_all_events(mock_confirm_to_delete: AsyncMock):
 
     assert "*АБСОЛЮТНО ВСЕ* мероприятия на этот день?" in delete_text[0]
     assert (
-        "*все существующие заметки* на эту дату! Восстановление будет невозможно"
-        in delete_text[1]
+        "*все существующие заметки* на эту дату! Восстановление будет невозможно" in delete_text[1]
     )
 
 
@@ -211,7 +210,9 @@ async def test_del_event_on_info(mock_delete_events_by_filter: AsyncMock):
 
     await del_event_on_info(context_mock, update_mock, "id", 999)
 
-    mock_delete_events_by_filter.assert_awaited_once_with(mock_conn, "id", 999, update_mock.effective_user.id)
+    mock_delete_events_by_filter.assert_awaited_once_with(
+        mock_conn, "id", 999, update_mock.effective_user.id
+    )
 
     context_mock.application.stats_repository.increment_metric.assert_awaited_once_with(
         "events_deleted", amount=1

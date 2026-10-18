@@ -18,10 +18,8 @@ from app.handlers.states import TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
 
 # --- ТЕСТ 1: Приглашение через инлайн-кнопку ---
 @pytest.mark.asyncio
-@patch('app.handlers.calendar_invite.is_user_invitee_for_event')
-async def test_handle_invite_event_selection_success(
-    mock_is_user_invitee_for_event: AsyncMock
-):
+@patch("app.handlers.calendar_invite.is_user_invitee_for_event")
+async def test_handle_invite_event_selection_success(mock_is_user_invitee_for_event: AsyncMock):
     update_mock, context_mock = AsyncMock(), MagicMock()
     mock_is_user_invitee_for_event.return_value = False
     # Имитируем клик по второй кнопке (индекс 1)
@@ -30,10 +28,10 @@ async def test_handle_invite_event_selection_success(
 
     context_mock.user_data = {
         "event_text_record": [
-            {"id": 100, "title": "Секретное собрание", 'start_time': time(1), 'end_time': time(2)},
-            {"id": 200, "title": "Корпоратив", 'start_time': time(5), 'end_time': time(9)},
+            {"id": 100, "title": "Секретное собрание", "start_time": time(1), "end_time": time(2)},
+            {"id": 200, "title": "Корпоратив", "start_time": time(5), "end_time": time(9)},
         ],
-        'selected_date': date(2026, 10, 10)
+        "selected_date": date(2026, 10, 10),
     }
 
     result = await handle_invite_event_selection(update_mock, context_mock)
@@ -57,9 +55,8 @@ async def test_handle_invite_event_selection_success(
     update_mock.callback_query.edit_message_text.assert_awaited_once()
     kwargs = update_mock.callback_query.edit_message_text.call_args.kwargs
 
-
     assert "*Выбрано событие*: Корпоратив" in kwargs["text"]
-    
+
     assert "*отправьте Telegram ID*" in kwargs["text"]
     assert kwargs["parse_mode"] == "Markdown"
 
@@ -155,7 +152,7 @@ async def test_handle_invitee_id_input_positive(
 
     # Имитируем отсутствие старой записи (человек зовётся впервые)
     mock_Appointment.objects.filter.return_value.afirst = AsyncMock(return_value=None)
-    
+
     # Имитируем создание новой записи
     created_appointment = MagicMock()
     created_appointment.id = 777
@@ -173,11 +170,9 @@ async def test_handle_invitee_id_input_positive(
     mock_User.objects.filter.assert_called_once_with(telegram_id=987654321)
     mock_Event.objects.aget.assert_awaited_once_with(id=999)
     mock_check_avail.assert_awaited_once_with(987654321, target_event)
-    
+
     # Проверяем, что была вызвана новая связка filter + acreate
-    mock_Appointment.objects.filter.assert_called_once_with(
-        event_id=999, invitee_id=987654321
-    )
+    mock_Appointment.objects.filter.assert_called_once_with(event_id=999, invitee_id=987654321)
     mock_Appointment.objects.acreate.assert_awaited_once_with(
         event_id=999, invitee_id=987654321, status="PENDING"
     )
@@ -187,9 +182,9 @@ async def test_handle_invitee_id_input_positive(
     send_msg_kwargs = context_mock.bot.send_message.call_args.kwargs
     assert send_msg_kwargs["chat_id"] == 987654321
     assert "📌 Секретное совещание" in send_msg_kwargs["text"]
-    assert 'Шеф' in send_msg_kwargs["text"]
-    assert 'Дата: 20.10.2026' in send_msg_kwargs['text']
-    assert 'Время: 15:00 - 16:00' in send_msg_kwargs['text']
+    assert "Шеф" in send_msg_kwargs["text"]
+    assert "Дата: 20.10.2026" in send_msg_kwargs["text"]
+    assert "Время: 15:00 - 16:00" in send_msg_kwargs["text"]
     assert send_msg_kwargs["reply_markup"] == "fake_keyboard"
 
     # 8. Валидация сообщения (Организатору)
@@ -292,7 +287,7 @@ async def test_handle_invitee_id_input_is_busy(
     mock_validate.return_value = (True, 987654321)
     mock_User.objects.filter.return_value.aexists = AsyncMock(return_value=True)
     mock_Event.objects.aget = AsyncMock(return_value=MagicMock())
-    
+
     # Имитируем, что история пустая (пользователя еще не звали)
     mock_Appointment.objects.filter.return_value.afirst = AsyncMock(return_value=None)
 
@@ -376,8 +371,8 @@ async def test_handle_invitee_id_input_telegram_error(
 
     target_event = MagicMock()
     target_event.start_time = None  # Чтобы не заморачиваться с форматом времени
-    target_event.title = 'Название события'
-    target_event.description = 'Описание события'
+    target_event.title = "Название события"
+    target_event.description = "Описание события"
     mock_Event.objects.aget = AsyncMock(return_value=target_event)
     mock_check_avail.return_value = False
 
@@ -390,7 +385,7 @@ async def test_handle_invitee_id_input_telegram_error(
 
     update_mock, context_mock = MagicMock(), MagicMock()
     update_mock.message.reply_text = AsyncMock()
-    update_mock.effective_user.first_name = 'Spider'
+    update_mock.effective_user.first_name = "Spider"
     context_mock.user_data = {"invite_event_id": 999}
 
     # Имитируем падение телеграма
@@ -495,6 +490,7 @@ async def test_handle_show_meetings_as_host_and_guest(
     # Проверяем параметры вызова Telegram API
     assert kwargs["parse_mode"] == "Markdown"
     assert kwargs["reply_markup"] == "fake_back_button"
+
 
 @pytest.mark.asyncio
 @patch("app.handlers.calendar_invite.generate_back_calendar_button")

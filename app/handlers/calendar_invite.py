@@ -14,11 +14,21 @@ from app.handlers.calendar_keyboard import (
     generate_confirm_invite_keyboard,
 )
 from app.handlers.commands import calendar_command
-from app.handlers.states import SELECTING_INVITE_EVENT, TYPING_INVITE_NUM, TYPING_INVITEE_ID, TYPING_PUBLIC_EVENTS_USER_ID
-from app.handlers.utils import get_validated_event_index, is_user_invitee_for_event, validate_telegram_id_input
+from app.handlers.states import (
+    SELECTING_INVITE_EVENT,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID,
+    TYPING_PUBLIC_EVENTS_USER_ID,
+)
+from app.handlers.utils import (
+    get_validated_event_index,
+    is_user_invitee_for_event,
+    validate_telegram_id_input,
+)
 from events.models import Appointment, Event, User
 
 logger = logging.getLogger(__name__)
+
 
 async def handle_invite_event_by_text_number(
     update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -199,9 +209,7 @@ async def handle_invitee_id_input(update: Update, context: ContextTypes.DEFAULT_
         status=Appointment.Status.PENDING,
     )
 
-    inviter_name = (
-        update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
-    )
+    inviter_name = update.effective_user.first_name or f"Пользователь {update.effective_user.id}"
     date_str = (
         target_event.event_date.strftime("%d.%m.%Y")
         if hasattr(target_event.event_date, "strftime")
@@ -299,7 +307,7 @@ async def handle_invite_response(update: Update, context: ContextTypes.DEFAULT_T
             await query.edit_message_text(
                 "❗ Вы не можете принять приглашение: на это время у вас уже запланировано другое событие."
             )
-            
+
             try:
                 await context.bot.send_message(
                     chat_id=inviter_id,

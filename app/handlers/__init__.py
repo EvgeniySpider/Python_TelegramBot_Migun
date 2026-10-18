@@ -169,9 +169,7 @@ calendar_conversation = ConversationHandler(
     fallbacks=[
         # Сброс текущей ветки и вызов свежего календаря поверх старого интерфейса
         CommandHandler("calendar", calendar_command),
-        CallbackQueryHandler(
-            handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"
-        )
+        CallbackQueryHandler(handle_back_to_calendar_click, pattern=r"^action_back_to_calendar$"),
     ],
     # Архитектурные флаги изоляции контекстов
     per_message=False,  # Состояние привязано к чату/юзеру, а не к конкретному сообщению
@@ -203,5 +201,5 @@ HANDLERS: tuple[BaseHandler, ...] = (
     # Выгрузка событий пользователя в форматах JSON и CSV
     CommandHandler(["exportjson", "exportcsv"], handle_export_events),
     # Получение или просмотр токена для запросов по API
-    CommandHandler(["api_token"], api_token_command)
+    CommandHandler(["api_token"], api_token_command),
 )

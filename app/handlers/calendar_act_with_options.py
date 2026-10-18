@@ -30,8 +30,11 @@ from app.handlers.states import (
     TYPING_INVITE_NUM,
     TYPING_INVITEE_ID,
 )
-from app.handlers.utils import get_organizer_edit_error_message, get_validated_event_index, is_user_invitee_for_event
-from events.models import Appointment
+from app.handlers.utils import (
+    get_organizer_edit_error_message,
+    get_validated_event_index,
+    is_user_invitee_for_event,
+)
 
 
 async def show_event_selection_list(

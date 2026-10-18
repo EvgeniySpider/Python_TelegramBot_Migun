@@ -18,7 +18,7 @@ class UserRepository:
 
             if not user_exists:
                 await conn.execute(
-                    "INSERT INTO users (telegram_id, registered_at) VALUES ($1, $2)",
+                    "INSERT INTO users (telegram_id, registered_at, events_created, events_edited, events_cancelled) VALUES ($1, $2, 0, 0, 0)",
                     user_id,
                     current_time,
                 )

@@ -14,15 +14,15 @@ class CalendarRepository:
         Вытаскивает из БД список дней месяца с их статусом занятости ('full' или 'partial').
         """
         query = """
-            SELECT 
+            SELECT
                 EXTRACT(DAY FROM event_date)::INTEGER AS day,
-                CASE 
-                    WHEN COUNT(*) FILTER (WHERE event_type = 'all_day') > 0 
+                CASE
+                    WHEN COUNT(*) FILTER (WHERE event_type = 'all_day') > 0
                         OR SUM(end_time - start_time) >= INTERVAL '23 hours 59 minutes' THEN 'full'
                     ELSE 'partial'
                 END AS status
             FROM events
-            WHERE user_id = $1 
+            WHERE user_id = $1
               AND EXTRACT(YEAR FROM event_date) = $2
               AND EXTRACT(MONTH FROM event_date) = $3
             GROUP BY event_date;
@@ -63,19 +63,19 @@ class CalendarRepository:
         """
         query = """
             WITH target_events AS (
-                SELECT start_time, end_time 
-                FROM events 
-                WHERE user_id = $1 
+                SELECT start_time, end_time
+                FROM events
+                WHERE user_id = $1
                 AND event_date = $2
                 AND event_type IN ('interval', 'exact')
-                -- Если $5 (exclude_event_id) передан, исключаем эту запись. 
+                -- Если $5 (exclude_event_id) передан, исключаем эту запись.
                 -- Если он равен NULL, условие ($5 IS NULL) вернет True и фильтр не сработает.
                 AND ($5::INT IS NULL OR id != $5::INT)
             )
             SELECT EXISTS (
-                SELECT 1 
+                SELECT 1
                 FROM target_events
-                WHERE $3::TIME < end_time 
+                WHERE $3::TIME < end_time
                 AND $4::TIME > start_time
             );
         """
@@ -106,8 +106,8 @@ class CalendarRepository:
     async def toggle_event_privacy(conn: asyncpg.Connection, event_id: int) -> None:
         """Инвертирует флаг публичности события."""
         query = """
-            UPDATE events 
-            SET is_public = NOT is_public 
+            UPDATE events
+            SET is_public = NOT is_public
             WHERE id = $1;
         """
         await conn.execute(query, event_id)

@@ -33,12 +33,12 @@ class StatsRepository:
 
         query = f"""
             INSERT INTO events_botstatistics (
-                date, new_users_count, calendar_clicks, 
-                events_created_all_day, events_created_exact, 
+                date, new_users_count, calendar_clicks,
+                events_created_all_day, events_created_exact,
                 events_created_interval, events_edited, events_deleted
             )
             VALUES ($1, 0, 0, 0, 0, 0, 0, 0)
-            ON CONFLICT (date) DO UPDATE 
+            ON CONFLICT (date) DO UPDATE
             SET {metric_name} = events_botstatistics.{metric_name} + $2
         """
 
@@ -55,7 +55,7 @@ class StatsRepository:
         # Запрос обновляет счетчик у существующего юзера.
         # (Пользователь гарантированно существует, т.к. создается при /start)
         query = f"""
-            UPDATE users 
+            UPDATE users
             SET {metric_name} = {metric_name} + $1
             WHERE telegram_id = $2
         """

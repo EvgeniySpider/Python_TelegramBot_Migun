@@ -294,10 +294,10 @@ async def handle_typing_edit_time(update: Update, context: ContextTypes.DEFAULT_
 
         await conn.execute(
             """
-            UPDATE events 
-            SET start_time = $1, 
-                end_time = $2, 
-                event_type = 'interval' 
+            UPDATE events
+            SET start_time = $1,
+                end_time = $2,
+                event_type = 'interval'
             WHERE id = $3
             """,
             start_time,
@@ -405,7 +405,7 @@ async def handle_edit_date_selection(update: Update, context: ContextTypes.DEFAU
             if target_day_status == "full":
                 query_all_day = """
                     SELECT EXISTS(
-                        SELECT 1 FROM events 
+                        SELECT 1 FROM events
                         WHERE user_id = $1 AND event_date = $2 AND event_type = 'all_day'
                     );
                 """

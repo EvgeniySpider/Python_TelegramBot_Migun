@@ -87,8 +87,8 @@ def seed_test_data_usual_events() -> None:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO users (telegram_id, registered_at, events_created, events_edited, events_cancelled) 
-                VALUES (%s, %s, 0, 0, 0) 
+                INSERT INTO users (telegram_id, registered_at, events_created, events_edited, events_cancelled)
+                VALUES (%s, %s, 0, 0, 0)
                 ON CONFLICT DO NOTHING;
                 """,
                 (YOUR_TELEGRAM_ID, now),
@@ -139,8 +139,8 @@ def seed_test_data() -> None:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO users (telegram_id, registered_at, events_created, events_edited, events_cancelled) 
-                VALUES (%s, %s, 0, 0, 0) 
+                INSERT INTO users (telegram_id, registered_at, events_created, events_edited, events_cancelled)
+                VALUES (%s, %s, 0, 0, 0)
                 ON CONFLICT DO NOTHING;
                 """,
                 (YOUR_TELEGRAM_ID, now),

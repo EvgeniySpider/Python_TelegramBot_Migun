@@ -45,7 +45,29 @@ from app.handlers.calendar_set_event import (
 )
 from app.handlers.commands import calendar_command, start
 from app.handlers.export_events import handle_export_events
-from app.handlers.states import *
+from app.handlers.states import (
+    CHOOSING_ACTION,
+    CHOOSING_EDIT_FIELD,
+    CHOOSING_EVENT_TO_DELETE,
+    CHOOSING_TIME,
+    CONFIRMING_DELETE,
+    SELECTING_EDIT_EVENT,
+    SELECTING_INVITE_EVENT,
+    TYPING_EDIT_DATE,
+    TYPING_EDIT_DESC,
+    TYPING_EDIT_NUM,
+    TYPING_EDIT_TIME,
+    TYPING_EDIT_TITLE,
+    TYPING_EVENT_NUMBER_TO_DELETE,
+    TYPING_INVITE_NUM,
+    TYPING_INVITEE_ID,
+    TYPING_PUBLIC_EVENTS_USER_ID,
+    WAITING_FOR_DESC_CHOICE,
+    WAITING_FOR_DESCRIPTION,
+    WAITING_FOR_TIME_INPUT_EXACT,
+    WAITING_FOR_TIME_INPUT_INTERVAL,
+    WAITING_FOR_TITLE,
+)
 
 # ============================================================================
 # ГЛАВНЫЙ ДИАЛОГОВЫЙ СЦЕНАРИЙ МОДУЛЯ КАЛЕНДАРЯ (FSM)

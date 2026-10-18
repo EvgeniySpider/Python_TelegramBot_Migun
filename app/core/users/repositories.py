@@ -25,11 +25,11 @@ class UserRepository:
 
                 await conn.execute(
                     """
-                    INSERT INTO events_botstatistics (date, new_users_count, calendar_clicks, 
-                                                events_created_all_day, events_created_exact, 
+                    INSERT INTO events_botstatistics (date, new_users_count, calendar_clicks,
+                                                events_created_all_day, events_created_exact,
                                                 events_created_interval, events_edited, events_deleted)
                     VALUES ($1, 1, 0, 0, 0, 0, 0, 0)
-                    ON CONFLICT (date) DO UPDATE 
+                    ON CONFLICT (date) DO UPDATE
                     SET new_users_count = events_botstatistics.new_users_count + 1
                     """,
                     current_date,

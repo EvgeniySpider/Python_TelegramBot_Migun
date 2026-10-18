@@ -39,7 +39,6 @@ async def test_create_user_if_not_exists():
 
     mock_conn = AsyncMock()
     mock_conn.fetchval.return_value = None
-    mock_conn.execute
 
     mock_db.connection.return_value.__aenter__.return_value = mock_conn
 

@@ -22,13 +22,13 @@ class BotTokenAuthentication(BaseAuthentication):
             if prefix.lower() not in ["token", "bearer"]:
                 return None
         except ValueError:
-            raise AuthenticationFailed('Неверный формат заголовка. Ожидается "Token <ключ>".')
+            raise AuthenticationFailed('Неверный формат заголовка. Ожидается "Token <ключ>".') from None
 
         # Ищем пользователя по токену
         try:
             user = User.objects.get(api_token=token)
         except User.DoesNotExist:
-            raise AuthenticationFailed("Неверный токен.")
+            raise AuthenticationFailed("Неверный токен.") from None
 
         # Проверяем срок годности
         lifetime_minutes: int = settings.api_token_lifetime_minutes

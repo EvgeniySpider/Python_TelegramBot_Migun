@@ -459,7 +459,7 @@ async def back_to_edit_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Восстанавливаем кэш занятости для ИСХОДНОГО месяца!
     # Если мы листали месяцы во время попытки сменить дату, в month_busy_days
     # остались чужие дни. Синхронизируем их обратно с selected_date.
-    if "selected_date" in context.user_data:
+    if context.user_data and "selected_date" in context.user_data:
         selected_date = context.user_data["selected_date"]
         async with context.application.database.connection() as conn:
             busy_days = await CalendarService.get_user_busy_days(

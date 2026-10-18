@@ -158,7 +158,7 @@ async def handle_calendar_nav_click(update: Update, context: ContextTypes.DEFAUL
     editing_day = None
 
     # 5. ВОССТАНАВЛИВАЕМ БЕЛЫЙ КРУЖОК ПРИ ВОЗВРАТЕ НА ИСХОДНЫЙ МЕСЯЦ
-    if is_editing and "selected_date" in context.user_data:
+    if is_editing and context.user_data and "selected_date" in context.user_data:
         original_date = context.user_data["selected_date"]
         # Если долистали обратно до того месяца и года, откуда переносим событие
         if original_date.year == target_year and original_date.month == target_month:

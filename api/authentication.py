@@ -22,7 +22,9 @@ class BotTokenAuthentication(BaseAuthentication):
             if prefix.lower() not in ["token", "bearer"]:
                 return None
         except ValueError:
-            raise AuthenticationFailed('Неверный формат заголовка. Ожидается "Token <ключ>".') from None
+            raise AuthenticationFailed(
+                'Неверный формат заголовка. Ожидается "Token <ключ>".'
+            ) from None
 
         # Ищем пользователя по токену
         try:

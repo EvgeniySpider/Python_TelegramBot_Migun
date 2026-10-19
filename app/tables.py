@@ -1,6 +1,6 @@
 import psycopg2
-from settings.config import AppSettings
 
+from settings.config import AppSettings
 
 settings = AppSettings()
 
@@ -17,9 +17,9 @@ CREATE_EVENTS_TABLE_QUERY = """
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('all_day', 'interval', 'exact')), 
+    event_type VARCHAR(20) NOT NULL CHECK (event_type IN ('all_day', 'interval', 'exact')),
     title VARCHAR(255) NOT NULL,
-    description TEXT NULL, 
+    description TEXT NULL,
     event_date DATE NOT NULL,
     start_time TIME NULL,
     end_time TIME NULL,

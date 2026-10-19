@@ -14,17 +14,24 @@ from app.handlers.calendar_keyboard import (
     generate_options_keyboard,
     generate_time_options_keyboard,
 )
-from app.handlers.states import CHOOSING_ACTION, CHOOSING_TIME
+from app.handlers.states import CHOOSING_ACTION, CHOOSING_TIME, TYPING_EDIT_DATE
 
 
 async def handle_calendar_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+
+    if query.data == "calendar_ignore":
+        await query.answer()
+        # Если юзер переносит дату — просто оставляем его в стейте выбора даты
+        if context.user_data and context.user_data.get("is_editing_date_mode"):
+            return TYPING_EDIT_DATE
+        return ConversationHandler.END
+
     # Если зафиксирован флаг изменения даты — делегируем управление хэндлеру-изменителю даты
     if context.user_data.get("is_editing_date_mode"):
         from app.handlers.calendar_edit_flow import handle_edit_date_selection
 
         return await handle_edit_date_selection(update, context)
-
-    query = update.callback_query
 
     parts = query.data.split(":")
     if parts[0] != "calendar_day":

@@ -88,5 +88,10 @@ def create_app(app_settings: AppSettings) -> Any:
 settings = AppSettings()
 if __name__ == "__main__":
     configure_logging()
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
     app = create_app(settings)
     app.run()
